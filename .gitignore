@@ -1,1 +1,4 @@
-Dataset/*
+*
+
+!*.py
+!README.txt
