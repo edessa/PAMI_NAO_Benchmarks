@@ -13,14 +13,13 @@ from sklearn.metrics import jaccard_score as jsc
 from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
+from torch.utils.data.sampler import SubsetRandomSampler
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, target_paths, clip_length = 1, train=True):
+    def __init__(self, image_paths, flow_paths, target_paths, clip_length = 1, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
-     self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
-
+     self.flow_paths = flow_paths
      self.clip_length = clip_length
      self.len = len(image_paths)
 
@@ -35,7 +34,8 @@ class CustomDataset(Dataset):
         beg = index-self.clip_length
         end = index+self.clip_length
         image_file = self.image_paths[index].split('_')
-        idx = int(image_file[3].strip('.png'))
+        flow_file = self.flow_paths[index].split('_')
+        idx = int(flow_file[3].strip('.npy'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
         overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
 
@@ -48,28 +48,19 @@ class CustomDataset(Dataset):
         overall_mask[0] = seg_mask
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
 
-        img_size = (228, 128)
-        last_img_filename = 'h'
-
         prev_image = image
 
         for i in range(idx, idx - 2 * self.clip_length, -2):
-            image_file[3] = str(i) + '.png'
-            image_filename = '_'.join(image_file)
+            flow_file[3] = str(i) + '.npy'
+            flow_filename = '_'.join(flow_file)
 
             try:
-                image = Image.open(image_filename).resize(img_size, Image.NEAREST)
-                last_img_filename = image_filename
+                flow = np.load(flow_filename)
+                last_flow_filename = flow_filename
             except Exception:
-                image = Image.open(last_img_filename).resize(img_size, Image.NEAREST)
+                flow = np.load(last_flow_filename)
 
-            prvs = cv2.cvtColor(np.array(prev_image), cv2.COLOR_BGR2GRAY)
-            curr = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2GRAY)
-            optical_flow = cv2.DualTVL1OpticalFlow_create()
-            flow = optical_flow.calc(prvs, curr, None)
-            flow = np.array(flow).reshape((2,) + (128, 228))
-
-            flow = torch.from_numpy(flow).type(torch.FloatTensor)
+            flow = torch.from_numpy(flow[0]).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, flow), 0)
 
             prev_image = image
@@ -333,7 +324,6 @@ def train_epoch(epoch, model, device, data_loader, optimizer):
 
         jaccard = jsc(target_cont, sampled_cont)
 
-        #jaccard = 0
         loss.backward()
         optimizer.step()
         accs.append(loss.item())
@@ -343,50 +333,54 @@ def train_epoch(epoch, model, device, data_loader, optimizer):
                 pid, epoch, batch_idx * len(data), len(data_loader.dataset),
                 100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:]))))
 
-def write_masks(net, test_loader, image_folder):
-    i = 0
-    net.eval()
-    image_data = sorted(glob.glob('./' + image_folder + '/images/*'))
-    dir = './nao_flow/'
-    for batch_idx, (test_images, test_labels) in enumerate(test_loader):
-        filename = image_data[i].replace('./' + image_folder + '/images/', '').replace('.png', '')
-        a = Variable(test_images).cuda()
-        out_labels = net(a).data.cpu().numpy()
-        #sample_image = image_origs[0].data.cpu().numpy()
-        seg_mask_nao = out_labels[0][0]
-        np.save(dir + image_folder + '/' + filename, seg_mask_nao)
-        i += 1
-
+def validate(test_loader, model, device, gamma=0.2):
+    model.eval()
+    losses = []
+    with torch.no_grad():
+        for batch_idx, (data, target) in enumerate(test_loader):
+            output = model(data.to(device))
+            target = target.to(device)
+            loss = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
+            losses.append(loss.item())
+    return np.mean(np.array(losses))
 
 def main():
     num_classes = 1
     clip_length = 3
-
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
+    flow_data = sorted(glob.glob('./train/flow/*'))
     mask_data = sorted(glob.glob('./train/masks/*'))
-    train_dataset = CustomDataset(image_data, mask_data, clip_length = clip_length, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=1)
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
+    indices = list(range(len(image_data)))
+    split = int(np.floor(0.9 * len(image_data)))
+    train_indices, test_indices = indices[:split], indices[split:]
+
+    train_sampler = SubsetRandomSampler(train_indices)
+    test_sampler = SubsetRandomSampler(test_indices)
+
     image_val_data = sorted(glob.glob('./val/images/*'))
+    flow_val_data = sorted(glob.glob('./val/flow/*'))
     mask_val_data = sorted(glob.glob('./val/masks/*'))
 
-    train_save_dataset = CustomDataset(image_data, mask_data, clip_length = clip_length, train=True)
-    train_save_loader = torch.utils.data.DataLoader(train_save_dataset, batch_size=1, shuffle=False, num_workers=1)
+    train_dataset = CustomDataset(image_data, flow_data, mask_data, clip_length=clip_length, train=True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16,num_workers=1)
+    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
-    val_save_dataset = CustomDataset(image_val_data, mask_val_data, clip_length = clip_length, train=True)
-    val_save_loader = torch.utils.data.DataLoader(val_save_dataset, batch_size=1, shuffle=False, num_workers=1)
-
+    best_loss = 100
+    print('Training session -- Next Active Object Flow')
     for epoch in range(0, 100):
-        if epoch % 20 == 0:
-            write_masks(net, train_save_loader, 'train')
-            write_masks(net, val_save_loader, 'val')
-            torch.save(net.state_dict(), './weights/nao_flow_' + str(epoch/10) + '.pt')
-        train_epoch(epoch, net, device, train_loader, optimizer)
+        #train_epoch(epoch, net, device, train_loader, optimizer)
+        loss = validate(test_loader, net, device)
+        if loss < best_loss:
+            print('Saving model -- epoch no. ', epoch)
+            torch.save(net.state_dict(), './weights/nao_flow_' + str(epoch) + '.pt')
+        best_loss = loss
+
 
 if __name__ == '__main__':
     main()

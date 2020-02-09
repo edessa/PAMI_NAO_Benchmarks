@@ -14,6 +14,7 @@ from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
 import math
+from torch.utils.data.sampler import SubsetRandomSampler
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, target_paths, train=True):
@@ -296,11 +297,11 @@ def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
                 100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(var_gt[-100:])),
                 np.mean(np.array(var_out[-100:]))))
 
-def validate(test_loader, model, gamma=0.2):
+def validate(test_loader, model, device, gamma=0.2):
     model.eval()
     losses = []
     with torch.no_grad():
-        for batch_idx, (data, target) in enumerate(data_loader):
+        for batch_idx, (data, target) in enumerate(test_loader):
             output = model(data.to(device))
             target = target.to(device)
 
@@ -324,7 +325,7 @@ def main():
 
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
-    indices = list(range(image_data))
+    indices = list(range(len(image_data)))
     split = int(np.floor(0.9 * len(image_data)))
     train_indices, test_indices = indices[:split], indices[split:]
 
@@ -335,16 +336,18 @@ def main():
     mask_val_data = sorted(glob.glob('./val/masks/*'))
 
     train_dataset = CustomDataset(image_data, mask_data, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, shuffle=True, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, shuffle=False, num_workers=1)
+    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
     best_loss = 100
     print('Training session -- Time Maps')
     for epoch in range(0, 100):
         train_epoch(epoch, net, device, train_loader, optimizer)
-        loss = validate(test_loader, net)
+        loss = validate(test_loader, net, device)
         if loss < best_loss:
+            print('Saving model -- epoch no. ', epoch)
             torch.save(net.state_dict(), './weights/time_maps_rgb_' + str(epoch) + '.pt')
+        best_loss = loss
 
 if __name__ == '__main__':
     main()
