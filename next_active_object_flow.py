@@ -374,7 +374,7 @@ def main():
     best_loss = 100
     print('Training session -- Next Active Object Flow')
     for epoch in range(0, 100):
-        #train_epoch(epoch, net, device, train_loader, optimizer)
+        train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
