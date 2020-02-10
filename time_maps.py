@@ -339,7 +339,7 @@ def main():
 
     best_loss = 100
     print('Training session -- Time Maps')
-    for epoch in range(0, 150):
+    for epoch in range(0, 200):
         train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
         if loss < best_loss:
