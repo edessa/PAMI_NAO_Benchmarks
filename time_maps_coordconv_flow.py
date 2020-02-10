@@ -13,14 +13,15 @@ from sklearn.metrics import jaccard_score as jsc
 from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
-import math
+from coordconv import Coords
 from torch.utils.data.sampler import SubsetRandomSampler
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, target_paths, train=True):
+    def __init__(self, image_paths, flow_paths, target_paths, clip_length = 1, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
-
+     self.flow_paths = flow_paths
+     self.clip_length = clip_length
      self.len = len(image_paths)
 
     def get_contacts(self, mask):
@@ -34,33 +35,55 @@ class CustomDataset(Dataset):
     def get_time(self, mask):
         res_nao = np.where(mask >= 9)
         res_no_nao = np.where(mask < 9)
-        #res_contacts = np.where(mask == 1)
 
         mask[res_no_nao[0], res_no_nao[1]] = -1
         mask[res_nao[0], res_nao[1]] = (mask[res_nao[0], res_nao[1]] - 10.0) / 30.0
-
         return mask.astype(np.float32)
 
     def __getitem__(self, index):
-        image = Image.open(self.image_paths[index])
-        image = image.resize((228, 128))
+        beg = index-self.clip_length
+        end = index+self.clip_length
+        image_file = self.image_paths[index].split('_')
+        flow_file = self.flow_paths[index].split('_')
+        idx = int(image_file[3].strip('.png'))
+        image = Image.open(self.image_paths[index]).resize((228, 128))
+        overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
+
         mask = np.load(self.target_paths[index])
+        time_mask = self.get_time(mask.copy())
+
         contact_mask, time_mask = self.get_contacts(mask.copy()), self.get_time(mask.astype(np.float32).copy())
-        #print(time_mask[np.where(time_mask > 0)])
 
         overall_mask = np.zeros((2, 128, 228))
         time_mask = cv2.resize(time_mask, (228, 128), interpolation=cv2.INTER_LINEAR)
         contact_mask = cv2.resize(contact_mask, (228, 128), interpolation=cv2.INTER_NEAREST)
-        #print(a_1, a_2)
 
         overall_mask[0] = contact_mask
         overall_mask[1] = time_mask
-
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
-        #print(overall_mask[1][np.where(overall_mask[1] > 0)])
 
-        image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-        return image, overall_mask
+        img_size = (228, 128)
+        last_img_filename = 'h'
+
+        prev_image = image
+
+        for i in range(idx, idx - 2 * self.clip_length, -2):
+            flow_file[3] = str(i) + '.npy'
+            flow_filename = '_'.join(flow_file)
+
+            try:
+                flow = np.load(flow_filename)
+                last_flow_filename = flow_filename
+            except Exception:
+                flow = np.load(last_flow_filename)
+
+            flow = torch.from_numpy(flow[0]).type(torch.FloatTensor)
+            overall_image = torch.cat((overall_image, flow), 0)
+
+            prev_image = image
+
+    #    masks = [torch.from_numpy(masks).type(torch.FloatTensor)]
+        return overall_image, overall_mask
 
     def __len__(self):
         return self.len
@@ -82,7 +105,7 @@ class FCN8s(nn.Module):
     def __init__(self, n_class=21):
         super(FCN8s, self).__init__()
         # conv1
-        self.conv1_1 = nn.Conv2d(3, 64, 3, padding=100)
+        self.conv1_1 = nn.Conv2d(6, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.relu1_2 = nn.ReLU(inplace=True)
@@ -103,6 +126,26 @@ class FCN8s(nn.Module):
         self.conv3_3 = nn.Conv2d(256, 256, 3, padding=1)
         self.relu3_3 = nn.ReLU(inplace=True)
         self.pool3 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/8
+
+        #Flow layers
+        self.conv_flow1_1 = nn.Conv2d(6, 64, 3, padding=100)
+        self.relu_flow1_1 = nn.ReLU(inplace=True)
+        self.conv_flow1_2 = nn.Conv2d(64, 64, 3, padding=1)
+        self.relu_flow1_2 = nn.ReLU(inplace=True)
+        self.pool_flow1 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/2
+        self.conv_flow2_1 = nn.Conv2d(64, 128, 3, padding=1)
+        self.relu_flow2_1 = nn.ReLU(inplace=True)
+        self.conv_flow2_2 = nn.Conv2d(128, 128, 3, padding=1)
+        self.relu_flow2_2 = nn.ReLU(inplace=True)
+        self.pool_flow2 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/4
+        self.conv_flow3_1 = nn.Conv2d(128, 256, 3, padding=1)
+        self.relu_flow3_1 = nn.ReLU(inplace=True)
+        self.conv_flow3_2 = nn.Conv2d(256, 256, 3, padding=1)
+        self.relu_flow3_2 = nn.ReLU(inplace=True)
+        self.conv_flow3_3 = nn.Conv2d(256, 256, 3, padding=1)
+        self.relu_flow3_3 = nn.ReLU(inplace=True)
+        self.pool_flow3 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/8
+
 
         # conv4
         self.conv4_1 = nn.Conv2d(256, 512, 3, padding=1)
@@ -173,7 +216,9 @@ class FCN8s(nn.Module):
                 m.weight.data.copy_(initial_weight)
 
     def forward(self, x, state=None):
-        h = x
+        h = torch.cat([x[:,:3], x[:,-3:]], dim=1)
+        f = x[:,3:9]
+
         h = self.relu1_1(self.conv1_1(h))
         h = self.relu1_2(self.conv1_2(h))
         h = self.pool1(h)
@@ -185,6 +230,23 @@ class FCN8s(nn.Module):
         h = self.relu3_1(self.conv3_1(h))
         h = self.relu3_2(self.conv3_2(h))
         h = self.relu3_3(self.conv3_3(h))
+
+
+        #Flow forward-pass here
+        f = self.relu_flow1_1(self.conv_flow1_1(f))
+        f = self.relu_flow1_2(self.conv_flow1_2(f))
+        f = self.pool_flow1(f)
+
+        f = self.relu_flow2_1(self.conv_flow2_1(f))
+        f = self.relu_flow2_2(self.conv_flow2_2(f))
+        f = self.pool_flow2(f)
+
+        f = self.relu_flow3_1(self.conv_flow3_1(f))
+        f = self.relu_flow3_2(self.conv_flow3_2(f))
+        f = self.relu_flow3_3(self.conv_flow3_3(f))
+
+        #Sum flow and RGB features (could concatenate instead)
+        h = torch.add(h, f)
         h = self.pool3(h)
         pool3 = h  # 1/8
 
@@ -229,10 +291,9 @@ class FCN8s(nn.Module):
 
         h = self.upscore8(h)
         h = h[:, :, 31:31 + x.size()[2], 31:31 + x.size()[3]].contiguous()
-
+        #print(h[:,1].shape)
         h[:,0] = F.sigmoid(h[:,0].clone())
         h[:,1] = F.relu(h[:,1].clone())
-
         return h
 
     def copy_params_from_fcn16s(self, fcn16s):
@@ -259,18 +320,23 @@ def loss_seg_fn(output, target):
     return loss
 
 def l1(output, target):
-    res = (target != -1).nonzero()
+    res = (target > 0).nonzero()
+    #print(len(target[res]))
     loss = torch.mean(torch.abs(output[res] - target[res]))
     return loss
 
 def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
+    coord_map = Coords(x_dim=228, y_dim=128, with_r=True)
+
     model.train()
     pid = os.getpid()
 
     for batch_idx, (data, target) in enumerate(data_loader):
+        data = coord_map.call(data)
+
         optimizer.zero_grad()
         output = model(data.to(device))
-        #target = target.unsqueeze(1)
+
         target = target.to(device)
 
         loss_1 = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
@@ -296,10 +362,14 @@ def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
                 np.mean(np.array(var_out[-100:]))))
 
 def validate(test_loader, model, device, gamma=0.2):
+    coord_map = Coords(x_dim=228, y_dim=128, with_r=True)
+
     model.eval()
     losses = []
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
+            data = coord_map.call(data)
+
             output = model(data.to(device))
             target = target.to(device)
 
@@ -315,8 +385,11 @@ def validate(test_loader, model, device, gamma=0.2):
 
 def main():
     num_classes = 2
+    clip_length = 3
+
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
+    flow_data = sorted(glob.glob('./train/flow/*'))
     mask_data = sorted(glob.glob('./train/masks/*'))
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
@@ -331,20 +404,21 @@ def main():
     test_sampler = SubsetRandomSampler(test_indices)
 
     image_val_data = sorted(glob.glob('./val/images/*'))
+    flow_val_data = sorted(glob.glob('./val/flow/*'))
     mask_val_data = sorted(glob.glob('./val/masks/*'))
 
-    train_dataset = CustomDataset(image_data, mask_data, train=True)
+    train_dataset = CustomDataset(image_data, flow_data, mask_data, clip_length=clip_length, train=True)
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
     best_loss = 100
-    print('Training session -- Time Maps')
+    print('Training session -- Time Maps (Coordconv + Flow)')
     for epoch in range(0, 150):
         train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save(net.state_dict(), './weights/time_maps_rgb_' + str(epoch) + '.pt')
+            torch.save(net.state_dict(), './weights/time_maps_coordconv_flow_' + str(epoch) + '.pt')
         best_loss = loss
 
 if __name__ == '__main__':

@@ -14,13 +14,13 @@ from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
 import math
+from coordconv import Coords
 from torch.utils.data.sampler import SubsetRandomSampler
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, target_paths, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
-
      self.len = len(image_paths)
 
     def get_contacts(self, mask):
@@ -34,7 +34,6 @@ class CustomDataset(Dataset):
     def get_time(self, mask):
         res_nao = np.where(mask >= 9)
         res_no_nao = np.where(mask < 9)
-        #res_contacts = np.where(mask == 1)
 
         mask[res_no_nao[0], res_no_nao[1]] = -1
         mask[res_nao[0], res_nao[1]] = (mask[res_nao[0], res_nao[1]] - 10.0) / 30.0
@@ -58,6 +57,7 @@ class CustomDataset(Dataset):
 
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
         #print(overall_mask[1][np.where(overall_mask[1] > 0)])
+        #image = self.coord_map.call(np.array(image))
 
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
         return image, overall_mask
@@ -82,7 +82,7 @@ class FCN8s(nn.Module):
     def __init__(self, n_class=21):
         super(FCN8s, self).__init__()
         # conv1
-        self.conv1_1 = nn.Conv2d(3, 64, 3, padding=100)
+        self.conv1_1 = nn.Conv2d(6, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.relu1_2 = nn.ReLU(inplace=True)
@@ -264,10 +264,13 @@ def l1(output, target):
     return loss
 
 def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
+    coord_map = Coords(x_dim=228, y_dim=128, with_r=True)
+
     model.train()
     pid = os.getpid()
 
     for batch_idx, (data, target) in enumerate(data_loader):
+        data = coord_map.call(data)
         optimizer.zero_grad()
         output = model(data.to(device))
         #target = target.unsqueeze(1)
@@ -297,9 +300,12 @@ def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
 
 def validate(test_loader, model, device, gamma=0.2):
     model.eval()
+    coord_map = Coords(x_dim=228, y_dim=128, with_r=True)
+
     losses = []
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
+            data = coord_map.call(data)
             output = model(data.to(device))
             target = target.to(device)
 
@@ -338,13 +344,13 @@ def main():
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
     best_loss = 100
-    print('Training session -- Time Maps')
+    print('Training session -- Time Maps (Coord Conv + RGB)')
     for epoch in range(0, 150):
         train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save(net.state_dict(), './weights/time_maps_rgb_' + str(epoch) + '.pt')
+            torch.save(net.state_dict(), './weights/time_maps_coordconv_' + str(epoch) + '.pt')
         best_loss = loss
 
 if __name__ == '__main__':

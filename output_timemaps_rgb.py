@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 def write_masks(net, test_loader, image_folder):
     i = 0
     image_data = sorted(glob.glob('./' + image_folder + '/images/*'))
-    dir = './time_map_data_rgb/'
+    dir = './' + image_folder + '/time_map_data_rgb/'
     for batch_idx, (test_images, test_labels) in enumerate(test_loader):
         filename = image_data[i].replace('./' + image_folder + '/images/', '').replace('.png', '')
         a = Variable(test_images).cuda()
@@ -27,13 +27,14 @@ def write_masks(net, test_loader, image_folder):
         res = np.where(sampled_cont == 1)
 
         seg_mask_nao[res] = 0.0
-        np.save(dir + image_folder + '/' + filename, seg_mask_nao)
+        cv2.imwrite(dir + '/' + filename + '.png', 127*seg_mask_nao)
+        #np.save(dir + '/' + filename, seg_mask_nao)
         i += 1
 
 num_classes = 2
 device = torch.device("cuda")
 net = FCN8s(num_classes).to(device)
-checkpoint = torch.load('./best_weights/time_maps_rgb/time_maps_rgb_4.0.pt')
+checkpoint = torch.load('./best_weights/time_maps_rgb/time_maps_rgb_98.pt')
 
 net.load_state_dict(checkpoint)
 net.eval()
