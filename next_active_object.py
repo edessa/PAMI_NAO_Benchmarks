@@ -323,7 +323,7 @@ def main():
         loss = validate(test_loader, net, device)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save(net.state_dict(), './weights/nao_' + str(epoch) + '.pt')
+            torch.save(net.state_dict(), './weights/nao.pt')
         best_loss = loss
 
 if __name__ == '__main__':
