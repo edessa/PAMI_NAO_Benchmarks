@@ -13,14 +13,13 @@ import os
 import shutil
 import pickle
 from PIL import Image
+from multiprocessing import Pool
 
-
-image_folder='./val'
-
+image_folder='./train'
 image_path = sorted(glob.glob(  image_folder + '/images/*'))
-clip_length=2
 
-for index in range(len(image_path)):
+def generate_optical_flow(index):
+    clip_length=2
     beg = index - clip_length
     end = index + clip_length
     image_file = image_path[index].split('_')
@@ -31,7 +30,7 @@ for index in range(len(image_path)):
     img_size = (228, 128)
     last_img_filename = image_path[index]
     flowfile=image_filename = '_'.join(image_file)
-    flowpath='./val/flow/'+flowfile.split('/')[-1].split('.')[0]+'.npy'
+    flowpath=image_folder + '/flow/'+flowfile.split('/')[-1].split('.')[0]+'.npy'
 
     prev_image = image
     F=[]
@@ -60,4 +59,7 @@ for index in range(len(image_path)):
     #print(Flow, Flow.dtype)
     np.save(flowpath,Flow)
 
-
+if __name__ == '__main__':
+    r = np.arange(len(image_path))
+    pool = Pool(5)
+    pool.map(generate_optical_flow, r)
