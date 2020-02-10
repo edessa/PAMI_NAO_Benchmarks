@@ -371,11 +371,7 @@ def main():
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    image_val_data = sorted(glob.glob('./val/images/*'))
-    mask_val_data = sorted(glob.glob('./val/masks/*'))
-    time_val_data = sorted(glob.glob('./val/time_map_data_rgb/*'))
-
-    train_dataset = CustomDataset(image_data, mask_data, time_data, clip_length=clip_length, train=True)
+    train_dataset = CustomDataset(image_data, time_data, mask_data, clip_length=clip_length, train=True)
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 

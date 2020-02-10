@@ -14,3 +14,5 @@ python3 -u <file>.py >> log.txt
 Notes:
 
 Make sure you have 50GB of storage. We're saving multiple weights for each training session
+
+Optical_flow.py is responsible for generating the optical flow frames

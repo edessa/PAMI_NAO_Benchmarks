@@ -360,7 +360,7 @@ def validate(test_loader, model, device, gamma=0.2):
     model.eval()
     losses = []
     with torch.no_grad():
-        for batch_idx, (data, target) in enumerate(data_loader):
+        for batch_idx, (data, target) in enumerate(test_loader):
             output = model(data.to(device))
             target = target.to(device)
 
