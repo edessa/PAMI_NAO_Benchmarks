@@ -2,6 +2,14 @@ import cv2
 import numpy as np
 from sklearn.metrics import jaccard_score as jsc
 
+def KL(P,Q):
+    epsilon = 0.00001
+    # You may want to instead make copies to avoid changing the np arrays.
+    P = P+epsilon
+    Q = Q+epsilon
+    divergence = np.sum(P*np.log(P/Q))
+    return divergence
+
 def coherence_error(flow, pred_1, pred_2):
     pred_1 = pred_1.reshape(128, 228)
     projected = cv2.remap(pred_1, flow, None, cv2.INTER_NEAREST)
