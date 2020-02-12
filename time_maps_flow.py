@@ -386,7 +386,7 @@ def main():
     net = FCN8s(num_classes).to(device)
 
     try:
-        checkpoint = torch.load('./weights/time_maps_rgb.pt')
+        checkpoint = torch.load('./weights/time_maps_flow.pt')
         net.load_state_dict(checkpoint)
         s = checkpoint['epoch']
     except Exception:
