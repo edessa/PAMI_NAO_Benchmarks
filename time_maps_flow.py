@@ -385,6 +385,13 @@ def main():
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
+    try:
+        checkpoint = torch.load('./weights/time_maps_rgb.pt')
+        net.load_state_dict(checkpoint)
+        s = checkpoint['epoch']
+    except Exception:
+        s = 0
+
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
     indices = list(range(len(image_data)))
@@ -404,12 +411,12 @@ def main():
 
     best_loss = 100
     print('Training session -- Time Maps (Flow)')
-    for epoch in range(0, 500):
+    for epoch in range(s, 150):
         train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save(net.state_dict(), './weights/time_maps_flow.pt')
+            torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/time_maps_flow.pt')
         best_loss = loss
 
 if __name__ == '__main__':
