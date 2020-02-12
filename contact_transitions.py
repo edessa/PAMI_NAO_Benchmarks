@@ -33,7 +33,7 @@ def write_masks(net, test_loader, image_folder):
             projected_conts = cv2.remap(prev_conts, flow, interpolation=cv2.INTER_NEAREST)
             trans_cont_ind = np.logical_and(np.where(conts == 0), np.where(projected_conts == 1))
             trans_no_cont_ind = np.logical_and(np.where(conts == 1), np.where(projected_conts == 0))
-
+            
         prev_conts = conts.copy()
         np.save(dir + image_folder + '/' + filename, seg_mask_nao)
         i += 1
