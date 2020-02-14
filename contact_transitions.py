@@ -33,7 +33,7 @@ def write_masks(net, test_loader, image_folder):
             projected_conts = cv2.remap(prev_conts, flow, interpolation=cv2.INTER_NEAREST)
             trans_cont_ind = np.logical_and(np.where(conts == 0), np.where(projected_conts == 1))
             trans_no_cont_ind = np.logical_and(np.where(conts == 1), np.where(projected_conts == 0))
-            
+            print(trans_cont_ind.shape)
         prev_conts = conts.copy()
         np.save(dir + image_folder + '/' + filename, seg_mask_nao)
         i += 1
@@ -42,7 +42,7 @@ num_classes = 2
 clip_length = 3
 device = torch.device("cuda")
 net = FCN8s(num_classes).to(device)
-#checkpoint = torch.load('./best_weights/time_maps_flow/time_maps_rgb_4.0.pt')
+checkpoint = torch.load('./curr_weights/weights/time_maps_rgb.pt')
 
 net.load_state_dict(checkpoint)
 net.eval()

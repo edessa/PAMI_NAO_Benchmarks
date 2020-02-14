@@ -324,7 +324,7 @@ def main():
 
     try:
         checkpoint = torch.load('./weights/nao_only_time_maps.pt')
-        net.load_state_dict(checkpoint)
+        net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
     except Exception:
         s = 0

@@ -1,5 +1,5 @@
 import torch
-from FCN import FCN8s, CustomDataset
+from next_active_object import FCN8s, CustomDataset
 import torch.optim as optim
 import glob
 import cv2
@@ -12,25 +12,26 @@ num_classes = 2
 device = torch.device("cuda")
 
 net = FCN8s(num_classes).to(device)
-checkpoint = torch.load('./weights/mse_weights.pt')
-net.load_state_dict(checkpoint)
+#checkpoint = torch.load('./weights/mse_weights.pt')
+#net.load_state_dict(checkpoint)
 print(net)
-image_data = sorted(glob.glob('/home/lab/baselines/train/images/*'))
-mask_data = sorted(glob.glob('/home/lab/baselines/train/masks/*'))
-dir = './31/'
+image_data = sorted(glob.glob('/home/lab/Object_Split/train/images/*'))
+mask_data = sorted(glob.glob('/home/lab/Object_Split/train/masks/*'))
+nao_data = sorted(glob.glob('/home/lab/Object_Split/train/nao_predictions/*'))
 test_dataset = CustomDataset(image_data, mask_data, train=True)
 test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
 i = 0
 j = 0
 count = 0
-net.train()
+#net.train()
 prev_start = 0
 cm = plt.get_cmap('gist_rainbow')
 
 for batch_idx, (test_images, test_labels) in enumerate(test_loader):
     filename = image_data[count]
-    start = int(filename.split('_')[1])
-    end = int(filename.split('_')[2])
+    print(filename)
+    start = int(filename.split('_')[2])
+    end = int(filename.split('_')[3])
     if start != prev_start:
         if i > 0:
             gif_list[0].save('./mosaics_all/' + str(i) + '.gif', save_all=True, duration=40, loop=0, append_images=gif_list[1:])
@@ -41,10 +42,11 @@ for batch_idx, (test_images, test_labels) in enumerate(test_loader):
     a = Variable(test_images).cuda()
 
     print(count)
-    seg_mask = np.array(cv2.imread(dir + 'seg_mask' + str(count) + '.png', cv2.IMREAD_GRAYSCALE)) / 255.0
-    nao_mask = np.array(cv2.imread(dir + 'seg_mask_nao' + str(count) + '.png', cv2.IMREAD_GRAYSCALE)) / 255.0
+    #seg_mask = np.array(cv2.imread(dir  + str(count) + '.png', cv2.IMREAD_GRAYSCALE)) / 255.0
+    #nao_mask = np.array(cv2.imread(dir  + str(count) + '.png', cv2.IMREAD_GRAYSCALE)) / 255.0
     #print(seg_mask.shape, nao_mask.shape)
-
+    seg_mask = np.load(nao_data[count])
+    nao_mask = np.load(nao_data[count])
     #seg_mask = out_labels[0][0]
     #nao_mask = out_labels[0][1]
     overall_image = Image.new('RGB', (228, 128*3))

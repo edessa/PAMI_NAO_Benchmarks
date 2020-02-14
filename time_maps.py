@@ -324,9 +324,9 @@ def main():
 
     try:
         checkpoint = torch.load('./weights/time_maps_rgb.pt')
-        net.load_state_dict(checkpoint)
+        net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
-    except Exception:
+    except Exception as err:
         s = 0
 
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
