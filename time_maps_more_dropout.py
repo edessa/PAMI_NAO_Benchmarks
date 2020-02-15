@@ -13,38 +13,53 @@ from sklearn.metrics import jaccard_score as jsc
 from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
+import math
 from torch.utils.data.sampler import SubsetRandomSampler
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, target_paths, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
-     self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
 
      self.len = len(image_paths)
 
-    def get_seg(self, mask):
-        res_contact = np.where(mask < 9)
-        res_no_contact = np.where(mask >= 9)
-        mask[res_contact[0], res_contact[1]] = 0
-        mask[res_no_contact[0], res_no_contact[1]] = 1
+    def get_contacts(self, mask):
+        res_contact = np.where(mask == 1)
+        res_no_contact = np.where(mask != 1)
+
+        mask[res_contact[0], res_contact[1]] = 1
+        mask[res_no_contact[0], res_no_contact[1]] = 0
         return mask
+
+    def get_time(self, mask):
+        res_nao = np.where(mask >= 9)
+        res_no_nao = np.where(mask < 9)
+        #res_contacts = np.where(mask == 1)
+
+        mask[res_no_nao[0], res_no_nao[1]] = -1
+        mask[res_nao[0], res_nao[1]] = (mask[res_nao[0], res_nao[1]] - 10.0) / 30.0
+
+        return mask.astype(np.float32)
 
     def __getitem__(self, index):
         image = Image.open(self.image_paths[index])
         image = image.resize((228, 128))
         mask = np.load(self.target_paths[index])
-        seg_mask = self.get_seg(mask.copy())
+        contact_mask, time_mask = self.get_contacts(mask.copy()), self.get_time(mask.astype(np.float32).copy())
+        #print(time_mask[np.where(time_mask > 0)])
 
-        overall_mask = np.zeros((1, 128, 228))
-        seg_mask = cv2.resize(seg_mask, (228, 128), interpolation=cv2.INTER_NEAREST)
+        overall_mask = np.zeros((2, 128, 228))
+        time_mask = cv2.resize(time_mask, (228, 128), interpolation=cv2.INTER_LINEAR)
+        contact_mask = cv2.resize(contact_mask, (228, 128), interpolation=cv2.INTER_NEAREST)
+        #print(a_1, a_2)
 
-        overall_mask[0] = seg_mask
+        overall_mask[0] = contact_mask
+        overall_mask[1] = time_mask
+
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
+        #print(overall_mask[1][np.where(overall_mask[1] > 0)])
+
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-        image = self.normalize(image)
-        #print(np.mean(image).cpu().numpy())
         return image, overall_mask
 
     def __len__(self):
@@ -67,6 +82,8 @@ class FCN8s(nn.Module):
     def __init__(self, n_class=21):
         super(FCN8s, self).__init__()
         # conv1
+        self.drop = nn.Dropout2d(p=0.2)
+
         self.conv1_1 = nn.Conv2d(3, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
@@ -114,7 +131,6 @@ class FCN8s(nn.Module):
 
         # fc7
         self.fc7 = nn.Conv2d(4096, 4096, 1)
-        #self.fc7 = ConvLSTMCell(4096, 4096, 1, 0)
         self.relu7 = nn.ReLU(inplace=True)
         self.drop7 = nn.Dropout2d()
 
@@ -163,22 +179,26 @@ class FCN8s(nn.Module):
         h = self.relu1_1(self.conv1_1(h))
         h = self.relu1_2(self.conv1_2(h))
         h = self.pool1(h)
+        h = self.drop(h)
 
         h = self.relu2_1(self.conv2_1(h))
         h = self.relu2_2(self.conv2_2(h))
         h = self.pool2(h)
+        h = self.drop(h)
 
         h = self.relu3_1(self.conv3_1(h))
         h = self.relu3_2(self.conv3_2(h))
         h = self.relu3_3(self.conv3_3(h))
         h = self.pool3(h)
         pool3 = h  # 1/8
+        h = self.drop(h)
 
         h = self.relu4_1(self.conv4_1(h))
         h = self.relu4_2(self.conv4_2(h))
         h = self.relu4_3(self.conv4_3(h))
         h = self.pool4(h)
         pool4 = h  # 1/16
+        h = self.drop(h)
 
         h = self.relu5_1(self.conv5_1(h))
         h = self.relu5_2(self.conv5_2(h))
@@ -215,8 +235,9 @@ class FCN8s(nn.Module):
 
         h = self.upscore8(h)
         h = h[:, :, 31:31 + x.size()[2], 31:31 + x.size()[3]].contiguous()
-        #print(h[:,1].shape)
+
         h[:,0] = F.sigmoid(h[:,0].clone())
+        h[:,1] = F.relu(h[:,1].clone())
 
         return h
 
@@ -234,8 +255,8 @@ class FCN8s(nn.Module):
                 l2.bias.data.copy_(l1.bias.data)
 
 accs = []
-conts = []
-no_conts = []
+var_gt = []
+var_out = []
 
 def loss_seg_fn(output, target):
     weight = torch.tensor([1.0]).cuda()
@@ -243,77 +264,78 @@ def loss_seg_fn(output, target):
     loss = loss_fn(output.cuda(), target.cuda())
     return loss
 
-def compare_contacts(output, target):
-    res = np.where(np.array(target) == 0)
-    loss = np.mean(np.abs(output[res] - target[res]))
+def l1(output, target):
+    res = (target != -1).nonzero()
+    loss = torch.mean(torch.abs(output[res] - target[res]))
     return loss
 
-def compare_no_contacts(output, target):
-    res = np.where(np.array(target) > 0)
-    loss = np.mean(np.abs(output[res] - target[res]))
-    return loss
-
-def train_epoch(epoch, model, device, data_loader, optimizer):
+def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
     model.train()
     pid = os.getpid()
 
     for batch_idx, (data, target) in enumerate(data_loader):
         optimizer.zero_grad()
         output = model(data.to(device))
-
+        #target = target.unsqueeze(1)
         target = target.to(device)
-        loss = loss_seg_fn(output.reshape(-1,).to(device), target.reshape(-1,).to(device))
 
-        target_cont = target[:,0].data.cpu().numpy().reshape(-1)
-        out_probs_cont = output[:,0].data.cpu().numpy().reshape(-1)
+        loss_1 = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
+        loss_2 = l1(output[:,1].reshape(-1,).to(device), target[:,1].reshape(-1,).to(device))
 
-        sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
+        if not np.isnan(loss_2.item()):
+            loss = torch.add(loss_1, gamma*loss_2)
+        else:
+            loss = loss_1
 
-        jaccard = jsc(target_cont, sampled_cont)
-
-        #jaccard = 0
         loss.backward()
         optimizer.step()
-        accs.append(loss.item())
-        conts.append(jaccard)
+
+        if not np.isnan(loss_2.item()):
+            accs.append(loss.item())
+            var_gt.append(loss_1.item())
+            var_out.append(loss_2.item())
+
         if batch_idx % 32 == 0:
-            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tJac: {:.6f}'.format(
+            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tContact: {:.6f} Time: {:.6f}'.format(
                 pid, epoch, batch_idx * len(data), len(data_loader.dataset),
-                100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:]))))
+                100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(var_gt[-100:])),
+                np.mean(np.array(var_out[-100:]))))
 
 def validate(test_loader, model, device, gamma=0.2):
     model.eval()
     losses = []
-    jaccards = []
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
             output = model(data.to(device))
             target = target.to(device)
-            loss = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
+
+            loss_1 = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
+            loss_2 = l1(output[:,1].reshape(-1,).to(device), target[:,1].reshape(-1,).to(device))
+
+            if not np.isnan(loss_2.item()):
+                loss = torch.add(loss_1, gamma*loss_2)
+            else:
+                loss = loss_1
             losses.append(loss.item())
-            target_cont = target[:,0].data.cpu().numpy().reshape(-1)
-            out_probs_cont = output[:,0].data.cpu().numpy().reshape(-1)
-            sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
-            jaccard = jsc(target_cont, sampled_cont)
-            jaccards.append(jaccard)
-    return np.mean(np.array(losses)), np.mean(np.array(jaccards))
+    return np.mean(np.array(losses))
 
 def main():
-    num_classes = 1
+    num_classes = 2
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
     mask_data = sorted(glob.glob('./train/masks/*'))
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
-    #try:
-    #    checkpoint = torch.load('./weights/weights/nao.pt')
-    #    net.load_state_dict(checkpoint['model_state_dict'])
-    #    s = checkpoint['epoch']
-    #except Exception:
-    #    s = 0
-    s = 0
-    optimizer = optim.Adam(net.parameters(), lr=0.0001)
+    try:
+        checkpoint = torch.load('./weights/time_maps_rgb.pt')
+        net.load_state_dict(checkpoint['model_state_dict'])
+        s = checkpoint['epoch']
+    except Exception as err:
+        s = 0
+
+    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
     indices = list(range(len(image_data)))
     split = int(np.floor(0.9 * len(image_data)))
@@ -322,22 +344,19 @@ def main():
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    image_val_data = sorted(glob.glob('./val/images/*'))
-    mask_val_data = sorted(glob.glob('./val/masks/*'))
-
     train_dataset = CustomDataset(image_data, mask_data, train=True)
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
     best_loss = 100
-    print('Training session -- Next Active Object Single RGB Frame')
-    for epoch in range(s, 200):
-        loss, jaccard = validate(test_loader, net, device)
-        print('Validation:', loss, jaccard)
+    print('Training session -- Time Maps')
+    for epoch in range(s, 150):
         train_epoch(epoch, net, device, train_loader, optimizer)
+        loss = validate(test_loader, net, device)
+        print('Validation:', loss)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
+            torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/time_maps_rgb.pt')
         best_loss = loss
 
 if __name__ == '__main__':
