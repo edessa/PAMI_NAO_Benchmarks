@@ -326,8 +326,10 @@ def main():
         checkpoint = torch.load('./weights/time_maps_rgb.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
+        best_loss = checkpoint['loss']
     except Exception as err:
         s = 0
+        best_loss = 100
 
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
@@ -342,16 +344,15 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
-    best_loss = 100
     print('Training session -- Time Maps')
     for epoch in range(s, 150):
         train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
-        print('Validation:', loss)
+        print('Validation:', loss, best_loss)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/time_maps_rgb.pt')
-        best_loss = loss
+            torch.save({'epoch': epoch, 'loss': loss, 'model_state_dict': net.state_dict()}, './weights/time_maps_rgb.pt')
+            best_loss = loss
 
 if __name__ == '__main__':
     main()

@@ -306,13 +306,15 @@ def main():
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
-    #try:
-    #    checkpoint = torch.load('./weights/weights/nao.pt')
-    #    net.load_state_dict(checkpoint['model_state_dict'])
-    #    s = checkpoint['epoch']
-    #except Exception:
-    #    s = 0
-    s = 0
+    try:
+        checkpoint = torch.load('./weights/weights/nao.pt')
+        net.load_state_dict(checkpoint['model_state_dict'])
+        s = checkpoint['epoch']
+        best_loss = checkpoint['loss']
+    except Exception:
+        s = 0
+        best_loss = 100
+
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
     indices = list(range(len(image_data)))
@@ -329,16 +331,15 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
-    best_loss = 100
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):
         loss, jaccard = validate(test_loader, net, device)
-        print('Validation:', loss, jaccard)
+        print('Validation:', loss, best_loss, jaccard)
         train_epoch(epoch, net, device, train_loader, optimizer)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
-        best_loss = loss
+            torch.save({'epoch': epoch, 'loss': loss, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
+            best_loss = loss
 
 if __name__ == '__main__':
     main()

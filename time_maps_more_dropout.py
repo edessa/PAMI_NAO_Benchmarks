@@ -332,6 +332,8 @@ def main():
         checkpoint = torch.load('./weights/time_maps_rgb.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
+        best_loss = 100
+
     except Exception as err:
         s = 0
 

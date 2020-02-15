@@ -343,12 +343,12 @@ def main():
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):
         loss, jaccard = validate(test_loader, net, device)
-        print('Validation:', loss, jaccard)
+        print('Validation:', loss, best_loss, jaccard)
         train_epoch(epoch, net, device, train_loader, optimizer)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
             torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
-        best_loss = loss
+            best_loss = loss
 
 if __name__ == '__main__':
     main()

@@ -336,13 +336,19 @@ def train_epoch(epoch, model, device, data_loader, optimizer):
 def validate(test_loader, model, device, gamma=0.2):
     model.eval()
     losses = []
+    jaccards = []
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
             output = model(data.to(device))
             target = target.to(device)
             loss = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
             losses.append(loss.item())
-    return np.mean(np.array(losses))
+            target_cont = target[:,0].data.cpu().numpy().reshape(-1)
+            out_probs_cont = output[:,0].data.cpu().numpy().reshape(-1)
+            sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
+            jaccard = jsc(target_cont, sampled_cont)
+            jaccards.append(jaccard)
+    return np.mean(np.array(losses)), np.mean(np.array(jaccards))
 
 def main():
     num_classes = 1
@@ -358,8 +364,10 @@ def main():
         checkpoint = torch.load('./weights/nao_flow.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
+        best_loss = checkpoint['loss']
     except Exception:
         s = 0
+        best_loss = 100
 
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
 
@@ -378,15 +386,15 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16,num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
-    best_loss = 100
     print('Training session -- Next Active Object Flow')
     for epoch in range(s, 200):
         train_epoch(epoch, net, device, train_loader, optimizer)
-        loss = validate(test_loader, net, device)
+        loss, jaccard = validate(test_loader, net, device)
+        print('Validation:', loss, best_loss, jaccard)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/nao_flow.pt')
-        best_loss = loss
+            torch.save({'epoch': epoch, 'loss': loss,'model_state_dict': net.state_dict()}, './weights/nao_flow.pt')
+            best_loss = loss
 
 
 if __name__ == '__main__':
