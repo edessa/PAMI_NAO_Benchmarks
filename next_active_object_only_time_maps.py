@@ -338,7 +338,7 @@ def main():
         s = 0
         best_loss = 100
 
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
+    optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     indices = list(range(len(image_data)))
     split = int(np.floor(0.9 * len(image_data)))

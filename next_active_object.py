@@ -43,6 +43,8 @@ class CustomDataset(Dataset):
         overall_mask[0] = seg_mask
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
+        image = self.normalize(image)
+
         #image = self.normalize(image)
         #print(np.mean(image).cpu().numpy())
         return image, overall_mask
@@ -307,7 +309,7 @@ def main():
     net = FCN8s(num_classes).to(device)
 
     try:
-        checkpoint = torch.load('./weights/weights/nao.pt')
+        checkpoint = torch.load('./weights/nao.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
         best_loss = checkpoint['loss']
@@ -315,7 +317,7 @@ def main():
         s = 0
         best_loss = 100
 
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
+    optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     indices = list(range(len(image_data)))
     split = int(np.floor(0.9 * len(image_data)))

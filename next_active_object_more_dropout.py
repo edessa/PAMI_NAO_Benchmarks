@@ -183,7 +183,7 @@ class FCN8s(nn.Module):
         h = self.relu4_3(self.conv4_3(h))
         h = self.pool4(h)
         h = self.drop(h)
-        
+
         pool4 = h  # 1/16
 
         h = self.relu5_1(self.conv5_1(h))
@@ -319,7 +319,7 @@ def main():
     #except Exception:
     #    s = 0
     s = 0
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
+    optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     indices = list(range(len(image_data)))
     split = int(np.floor(0.9 * len(image_data)))

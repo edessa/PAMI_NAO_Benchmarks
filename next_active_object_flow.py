@@ -38,6 +38,7 @@ class CustomDataset(Dataset):
         idx = int(flow_file[3].strip('.npy'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
         overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
+        overall_image = self.normalize(overall_image)
 
         mask = np.load(self.target_paths[index])
         seg_mask = self.get_seg(mask.copy())
@@ -369,7 +370,7 @@ def main():
         s = 0
         best_loss = 100
 
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9, weight_decay=0.0005)
+    optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     indices = list(range(len(image_data)))
     split = int(np.floor(0.9 * len(image_data)))
