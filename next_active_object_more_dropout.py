@@ -344,7 +344,7 @@ def main():
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
             torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
-        best_loss = loss
+            best_loss = loss
 
 if __name__ == '__main__':
     main()
