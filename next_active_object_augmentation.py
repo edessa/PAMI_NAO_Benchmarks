@@ -12,15 +12,17 @@ import torch.nn.functional as F
 from sklearn.metrics import jaccard_score as jsc
 from torch.autograd import Variable
 from skimage.transform import resize
+import random
 import cv2
+from torchvision.transforms.functional import hflip
 from torch.utils.data.sampler import SubsetRandomSampler
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, target_paths, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
-     self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
+     #self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                             std=[0.229, 0.224, 0.225])
 
      self.len = len(image_paths)
 
@@ -34,16 +36,24 @@ class CustomDataset(Dataset):
     def __getitem__(self, index):
         image = Image.open(self.image_paths[index])
         image = image.resize((228, 128))
+        image = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.25)(image)
         mask = np.load(self.target_paths[index])
+        #print('unflipped', mask)
+        if random.random() > 0.5:
+            image = hflip(image)
+            mask = np.array(hflip(Image.fromarray(mask)))
+            #print('flipped', mask)
         seg_mask = self.get_seg(mask.copy())
 
         overall_mask = np.zeros((1, 128, 228))
         seg_mask = cv2.resize(seg_mask, (228, 128), interpolation=cv2.INTER_NEAREST)
 
         overall_mask[0] = seg_mask
+
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-        #image = self.normalize(image)
+
+        image = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
         #print(np.mean(image).cpu().numpy())
         return image, overall_mask
 

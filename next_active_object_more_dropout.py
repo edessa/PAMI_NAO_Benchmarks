@@ -67,6 +67,7 @@ class FCN8s(nn.Module):
     def __init__(self, n_class=21):
         super(FCN8s, self).__init__()
         # conv1
+        self.drop = nn.Dropout2d(p=0.2)
         self.conv1_1 = nn.Conv2d(3, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
@@ -163,21 +164,26 @@ class FCN8s(nn.Module):
         h = self.relu1_1(self.conv1_1(h))
         h = self.relu1_2(self.conv1_2(h))
         h = self.pool1(h)
+        h = self.drop(h)
 
         h = self.relu2_1(self.conv2_1(h))
         h = self.relu2_2(self.conv2_2(h))
         h = self.pool2(h)
+        h = self.drop(h)
 
         h = self.relu3_1(self.conv3_1(h))
         h = self.relu3_2(self.conv3_2(h))
         h = self.relu3_3(self.conv3_3(h))
         h = self.pool3(h)
         pool3 = h  # 1/8
+        h = self.drop(h)
 
         h = self.relu4_1(self.conv4_1(h))
         h = self.relu4_2(self.conv4_2(h))
         h = self.relu4_3(self.conv4_3(h))
         h = self.pool4(h)
+        h = self.drop(h)
+        
         pool4 = h  # 1/16
 
         h = self.relu5_1(self.conv5_1(h))

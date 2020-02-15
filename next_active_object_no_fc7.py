@@ -188,10 +188,10 @@ class FCN8s(nn.Module):
         h = self.relu6(self.fc6(h))
         h = self.drop6(h)
         #h, _ = self.fc7(h, None)
-        h = self.fc7(h) #This is the ConvLSTM Block
+        #h = self.fc7(h) #This is the ConvLSTM Block
 
-        h = self.relu7(h)
-        h = self.drop7(h)
+        ##h = self.relu7(h)
+        #h = self.drop7(h)
 
         h = self.score_fr(h)
         h = self.upscore2(h)
