@@ -38,7 +38,7 @@ class CustomDataset(Dataset):
         idx = int(flow_file[3].strip('.npy'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
         overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-        #overall_image = self.normalize(overall_image)
+        overall_image = self.normalize(overall_image)
 
         mask = np.load(self.target_paths[index])
         seg_mask = self.get_seg(mask.copy())

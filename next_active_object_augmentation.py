@@ -21,8 +21,8 @@ class CustomDataset(Dataset):
     def __init__(self, image_paths, target_paths, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
-     #self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                             std=[0.229, 0.224, 0.225])
+     self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
 
      self.len = len(image_paths)
 
@@ -52,8 +52,9 @@ class CustomDataset(Dataset):
 
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
+        image = self.normalize(image)
 
-        image = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
+        #image = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
         #print(np.mean(image).cpu().numpy())
         return image, overall_mask
 

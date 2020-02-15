@@ -43,7 +43,7 @@ class CustomDataset(Dataset):
         overall_mask[0] = seg_mask
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-        #image = self.normalize(image)
+        image = self.normalize(image)
         #print(np.mean(image).cpu().numpy())
         return image, overall_mask
 
