@@ -50,7 +50,6 @@ class CustomDataset(Dataset):
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
 
         img_size = (228, 128)
-        prev_image = image
 
         for i in range(idx, idx - 2 * self.clip_length, -2):
             time_file[6] = str(i) + '.npy'
@@ -65,8 +64,6 @@ class CustomDataset(Dataset):
 
             time_map = torch.from_numpy(time_map.reshape(1, 128, 228)).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, time_map), 0)
-
-            prev_image = time_map
 
     #    masks = [torch.from_numpy(masks).type(torch.FloatTensor)]
         return overall_image, overall_mask
@@ -362,7 +359,7 @@ def main():
     clip_length = 4
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
-    mask_data = sorted(glob.glob('./train/masks/*'))
+    mask_data = sorted(glob.glob('./train/masks_nao/*'))
     time_data = sorted(glob.glob('./train/time_map_data_rgb/*'))
 
     device = torch.device("cuda")
@@ -392,13 +389,13 @@ def main():
 
     print('Training session -- Next Active Object Time Maps')
     for epoch in range(s, 200):
-        train_epoch(epoch, net, device, train_loader, optimizer)
         loss, jaccard = validate(test_loader, net, device)
         print('Validation:', loss, best_loss, jaccard)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
             torch.save({'epoch': epoch,'loss': loss, 'model_state_dict': net.state_dict()}, './weights/nao_time_maps.pt')
             best_loss = loss
+        train_epoch(epoch, net, device, train_loader, optimizer)
 
 if __name__ == '__main__':
     main()

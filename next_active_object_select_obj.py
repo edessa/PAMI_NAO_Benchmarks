@@ -12,10 +12,11 @@ import torch.nn.functional as F
 from sklearn.metrics import jaccard_score as jsc
 from torch.autograd import Variable
 from skimage.transform import resize
-import random
 import cv2
-from torchvision.transforms.functional import hflip
+import random
 from torch.utils.data.sampler import SubsetRandomSampler
+from torchvision.transforms.functional import hflip
+from evaluations.utils import cleanup_obj
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, target_paths, train=True):
@@ -36,25 +37,21 @@ class CustomDataset(Dataset):
     def __getitem__(self, index):
         image = Image.open(self.image_paths[index])
         image = image.resize((228, 128))
-        image = transforms.ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.25)(image)
         mask = np.load(self.target_paths[index])
-        #print('unflipped', mask)
         if random.random() > 0.5:
             image = hflip(image)
             mask = np.array(hflip(Image.fromarray(mask)))
-            #print('flipped', mask)
         seg_mask = self.get_seg(mask.copy())
 
         overall_mask = np.zeros((1, 128, 228))
         seg_mask = cv2.resize(seg_mask, (228, 128), interpolation=cv2.INTER_NEAREST)
 
         overall_mask[0] = seg_mask
-
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
         image = self.normalize(image)
 
-        #image = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
+        #image = self.normalize(image)
         #print(np.mean(image).cpu().numpy())
         return image, overall_mask
 
@@ -264,33 +261,6 @@ def compare_no_contacts(output, target):
     loss = np.mean(np.abs(output[res] - target[res]))
     return loss
 
-def train_epoch(epoch, model, device, data_loader, optimizer):
-    model.train()
-    pid = os.getpid()
-
-    for batch_idx, (data, target) in enumerate(data_loader):
-        optimizer.zero_grad()
-        output = model(data.to(device))
-
-        target = target.to(device)
-        loss = loss_seg_fn(output.reshape(-1,).to(device), target.reshape(-1,).to(device))
-
-        target_cont = target[:,0].data.cpu().numpy().reshape(-1)
-        out_probs_cont = output[:,0].data.cpu().numpy().reshape(-1)
-
-        sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
-
-        jaccard = jsc(target_cont, sampled_cont)
-
-        #jaccard = 0
-        loss.backward()
-        optimizer.step()
-        accs.append(loss.item())
-        conts.append(jaccard)
-        if batch_idx % 32 == 0:
-            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tJac: {:.6f}'.format(
-                pid, epoch, batch_idx * len(data), len(data_loader.dataset),
-                100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:]))))
 
 def validate(test_loader, model, device, gamma=0.2):
     model.eval()
@@ -307,49 +277,88 @@ def validate(test_loader, model, device, gamma=0.2):
             sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
             jaccard = jsc(target_cont, sampled_cont)
             jaccards.append(jaccard)
-    return np.mean(np.array(losses)), np.mean(np.array(jaccards))
+    return np.mean(np.array(jaccards))
+
+def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_jaccard):
+    model.train()
+    pid = os.getpid()
+    for batch_idx, (data, target) in enumerate(data_loader):
+        optimizer.zero_grad()
+        output = model(data.to(device))
+
+        target = target.to(device)
+        loss = loss_seg_fn(output.reshape(-1,).to(device), target.reshape(-1,).to(device))
+
+        target_cont = target[:,0].data.cpu().numpy().reshape(-1)
+        out_probs_cont = output[:,0].data.cpu().numpy().reshape(-1)
+
+        sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
+
+        jaccard = jsc(target_cont, sampled_cont)
+
+        loss.backward()
+        optimizer.step()
+        accs.append(loss.item())
+        conts.append(jaccard)
+        if batch_idx % 32 == 0:
+            val_jaccard = validate(test_loader, model, device)
+            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tJac: {:.6f}\tVal Jac: {:.6f}\tBest Val Jac: {:.6f}'.format(
+                pid, epoch, batch_idx * len(data), len(data_loader.dataset),
+                100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:])), val_jaccard, best_jaccard))
+            if val_jaccard > best_jaccard:
+                best_jaccard = val_jaccard
+            model.train()
+    return best_jaccard
 
 def main():
     num_classes = 1
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
-    mask_data = sorted(glob.glob('./train/masks/*'))
+    mask_data = sorted(glob.glob('./train/masks_nao/*'))
+
+    obj_idxs = cleanup_obj(image_data)
+
+    image_data = image_data[obj_idxs]
+    mask_data = mask_data[obj_idxs]
+
+    print(len(image_data))
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
-    #try:
-    #    checkpoint = torch.load('./weights/weights/nao.pt')
-    #    net.load_state_dict(checkpoint['model_state_dict'])
-    #    s = checkpoint['epoch']
-    #except Exception:
-    #    s = 0
-    s = 0
+    try:
+        checkpoint = torch.load('./weights/nao.pt')
+        net.load_state_dict(checkpoint['model_state_dict'])
+        s = checkpoint['epoch']
+        best_jaccard = checkpoint['loss']
+    except Exception:
+        s = 0
+        best_jaccard = 0
+
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     indices = list(range(len(image_data)))
+
     split = int(np.floor(0.9 * len(image_data)))
     train_indices, test_indices = indices[:split], indices[split:]
 
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    image_val_data = sorted(glob.glob('./val/images/*'))
-    mask_val_data = sorted(glob.glob('./val/masks/*'))
+    #image_val_data = sorted(glob.glob('./val/images/*'))
+    #mask_val_data = sorted(glob.glob('./val/masks/*'))
 
     train_dataset = CustomDataset(image_data, mask_data, train=True)
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
-    best_loss = 100
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):
-        loss, jaccard = validate(test_loader, net, device)
-        print('Validation:', loss, best_loss, jaccard)
-        train_epoch(epoch, net, device, train_loader, optimizer)
-        if loss < best_loss:
+        jaccard = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard)
+        if jaccard > best_jaccard:
             print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
-            best_loss = loss
+            torch.save({'epoch': epoch, 'loss': jaccard, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
+            best_jaccard = jaccard
 
 if __name__ == '__main__':
     main()

@@ -389,13 +389,13 @@ def main():
 
     print('Training session -- Next Active Object Flow')
     for epoch in range(s, 200):
-        train_epoch(epoch, net, device, train_loader, optimizer)
         loss, jaccard = validate(test_loader, net, device)
         print('Validation:', loss, best_loss, jaccard)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
             torch.save({'epoch': epoch, 'loss': loss,'model_state_dict': net.state_dict()}, './weights/nao_flow.pt')
             best_loss = loss
+        train_epoch(epoch, net, device, train_loader, optimizer)
 
 
 if __name__ == '__main__':

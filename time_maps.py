@@ -17,9 +17,10 @@ import math
 from torch.utils.data.sampler import SubsetRandomSampler
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, target_paths, train=True):
+    def __init__(self, image_paths, target_nao_paths, target_conts_paths, train=True):
      self.image_paths = image_paths
-     self.target_paths = target_paths
+     self.target_nao_paths = target_nao_paths
+     self.target_conts_paths = target_conts_paths
 
      self.len = len(image_paths)
 
@@ -44,8 +45,10 @@ class CustomDataset(Dataset):
     def __getitem__(self, index):
         image = Image.open(self.image_paths[index])
         image = image.resize((228, 128))
-        mask = np.load(self.target_paths[index])
-        contact_mask, time_mask = self.get_contacts(mask.copy()), self.get_time(mask.astype(np.float32).copy())
+        mask_cont = np.load(self.target_conts_paths[index])
+        mask_nao = np.load(self.target_nao_paths[index])
+
+        contact_mask, time_mask = self.get_contacts(mask_cont.copy()), self.get_time(mask_nao.astype(np.float32).copy())
         #print(time_mask[np.where(time_mask > 0)])
 
         overall_mask = np.zeros((2, 128, 228))
@@ -317,7 +320,8 @@ def main():
     num_classes = 2
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
-    mask_data = sorted(glob.glob('./train/masks/*'))
+    mask_nao_data = sorted(glob.glob('./train/masks_nao/*'))
+    mask_cont_data = sorted(glob.glob('./train/masks_cont/*'))
 
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
@@ -340,19 +344,19 @@ def main():
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    train_dataset = CustomDataset(image_data, mask_data, train=True)
+    train_dataset = CustomDataset(image_data, mask_nao_data, mask_cont_data, train=True)
     train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
 
     print('Training session -- Time Maps')
     for epoch in range(s, 150):
-        train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
         print('Validation:', loss, best_loss)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
             torch.save({'epoch': epoch, 'loss': loss, 'model_state_dict': net.state_dict()}, './weights/time_maps_rgb.pt')
             best_loss = loss
+        train_epoch(epoch, net, device, train_loader, optimizer)
 
 if __name__ == '__main__':
     main()

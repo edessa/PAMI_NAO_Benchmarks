@@ -413,14 +413,13 @@ def main():
 
     print('Training session -- Time Maps (Flow)')
     for epoch in range(s, 150):
-        train_epoch(epoch, net, device, train_loader, optimizer)
         loss = validate(test_loader, net, device)
         print('Validation:', loss, best_loss)
-
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
             torch.save({'epoch': epoch, 'loss': loss, 'model_state_dict': net.state_dict()}, './weights/time_maps_flow.pt')
             best_loss = loss
+        train_epoch(epoch, net, device, train_loader, optimizer)
 
 if __name__ == '__main__':
     main()

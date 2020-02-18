@@ -23,7 +23,7 @@ class CustomDataset(Dataset):
                                  std=[0.229, 0.224, 0.225])
 
      self.clip_length = clip_length
-     self.len = len(image_paths)
+     self.len = len(time_paths)
 
     def get_seg(self, mask):
         res_contact = np.where(mask >= 9)
@@ -47,7 +47,6 @@ class CustomDataset(Dataset):
         overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
 
         img_size = (228, 128)
-        prev_image = image
 
         for i in range(idx, idx - 2 * self.clip_length, -2):
             time_file[6] = str(i) + '.npy'
@@ -65,8 +64,6 @@ class CustomDataset(Dataset):
                 overall_image = time_map
             else:
                 overall_image = torch.cat((overall_image, time_map), 0)
-
-            prev_image = time_map
 
     #    masks = [torch.from_numpy(masks).type(torch.FloatTensor)]
         return overall_image, overall_mask
@@ -91,7 +88,7 @@ class FCN8s(nn.Module):
     def __init__(self, n_class=21):
         super(FCN8s, self).__init__()
         # conv1
-        self.conv1_1 = nn.Conv2d(3, 64, 3, padding=100)
+        self.conv1_1 = nn.Conv2d(4, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.relu1_2 = nn.ReLU(inplace=True)
@@ -340,8 +337,8 @@ def main():
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    indices = list(range(len(image_data)))
-    split = int(np.floor(0.9 * len(image_data)))
+    indices = list(range(len(time_data)))
+    split = int(np.floor(0.9 * len(time_data)))
     train_indices, test_indices = indices[:split], indices[split:]
 
     train_sampler = SubsetRandomSampler(train_indices)
@@ -353,13 +350,13 @@ def main():
 
     print('Training session -- Next Active Object Time Maps')
     for epoch in range(s, 200):
-        train_epoch(epoch, net, device, train_loader, optimizer)
         loss, jaccard = validate(test_loader, net, device)
         print('Validation:', loss, best_loss, jaccard)
         if loss < best_loss:
             print('Saving model -- epoch no. ', epoch)
             torch.save({'epoch': epoch, 'loss': loss,'model_state_dict': net.state_dict()}, './weights/nao_only_time_maps.pt')
             best_loss = loss
+        train_epoch(epoch, net, device, train_loader, optimizer)
 
 if __name__ == '__main__':
     main()
