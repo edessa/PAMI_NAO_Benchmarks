@@ -3,12 +3,10 @@ import torch
 import numpy as np
 from sklearn.metrics import jaccard_score as jsc
 from torch import nn
-
+import csv
 import os
 
-def cleanup_obj(dir_img):
-    images_path= dir_img + '/*'
-    image_files= sorted(glob.glob(images_path))
+def cleanup_obj(image_files, objs):
     interested_uids = []
     filename_list = []
     selected_filepath = []
@@ -16,14 +14,13 @@ def cleanup_obj(dir_img):
     person_list = []
     selected_uids = []
     for i in range(len(image_files)):
-        print(image_files[i])
-        uidname = image_files[i].split('_')[2].split('/')[1]
+        uidname = image_files[i].split('_')[0].split('/')[3]
         filename = image_files[i]
         interested_uids.append(uidname)
         filename_list.append(filename)
     my_list = list(set(interested_uids))
 
-    with open('./EPIC_train_action_labels.csv') as f:
+    with open('./evaluations/EPIC_train_action_labels.csv') as f:
         reader = list(csv.DictReader(f))
         for m in my_list:
             for row in reader:
@@ -34,23 +31,28 @@ def cleanup_obj(dir_img):
                     object_list.append(objectclass)
                     person_list.append(person)
     unique_object = np.unique(np.array(object_list))
-    with open('./EPIC_train_action_labels.csv') as f:
+    a = {}
+
+    with open('./evaluations/EPIC_train_action_labels.csv') as f:
         reader = list(csv.DictReader(f))
         for row in reader:
-            if row['noun_class']=='1':
+            if int(row['noun_class']) in objs:
                 if row['uid'] in my_list:
+                    if row['noun_class'] not in a.keys():
+                        a[row['noun_class']] = 1
+                    else:
+                        a[row['noun_class']] += 1
+                    t += 1
                     selected_uids.append(int(row['uid']))
 
     unique_selected_uids = np.unique(np.array(selected_uids))
-    print(unique_object)
-    print(unique_selected_uids)
-
     for i in range(len(image_files)):
-        uidname=image_files[i].split('_')[2].split('/')[1]
+        uidname = image_files[i].split('_')[0].split('/')[3]
         filename=image_files[i]
         if int(uidname) in unique_selected_uids:
             selected_filepath.append(i)
-    return selected_filepath
+
+    return selected_filepath, a
 
 def loss_seg_fn(output, target):
     weight = torch.tensor([1.0]).cuda()

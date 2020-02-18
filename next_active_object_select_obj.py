@@ -316,10 +316,10 @@ def main():
     image_data = sorted(glob.glob('./train/images/*'))
     mask_data = sorted(glob.glob('./train/masks_nao/*'))
 
-    obj_idxs = cleanup_obj(image_data)
-
-    image_data = image_data[obj_idxs]
-    mask_data = mask_data[obj_idxs]
+    obj_idxs, obj_hist = np.array(cleanup_obj(image_data, list(range(500))))
+    print(obj_hist)
+    image_data = list(image_data[i] for i in obj_idxs)
+    mask_data = list(mask_data[i] for i in obj_idxs)
 
     print(len(image_data))
 
