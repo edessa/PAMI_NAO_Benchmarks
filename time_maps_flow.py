@@ -430,7 +430,7 @@ def main():
     val_dataset = CustomDataset(image_val_data, flow_val_data, mask_nao_val_data, mask_cont_val_data, clip_length=clip_length, train=True)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, num_workers=1)
 
     print('Training session -- Time Maps (Flow)')
     for epoch in range(s, 200):
