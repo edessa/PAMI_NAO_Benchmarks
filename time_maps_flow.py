@@ -15,14 +15,18 @@ from skimage.transform import resize
 import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
+import random
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, target_nao_paths, target_conts_paths, clip_length = 1, train=True):
+    def __init__(self, image_paths, flow_paths, target_nao_paths, target_conts_paths, clip_length = 1, train=True):
      self.image_paths = image_paths
-     self.target_paths = target_paths
+     self.target_nao_paths = target_nao_paths
+     self.target_conts_paths = target_conts_paths
      self.flow_paths = flow_paths
      self.clip_length = clip_length
      self.len = len(image_paths)
+     self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
 
     def get_contacts(self, mask):
         res_contact = np.where(mask == 1)
@@ -48,10 +52,10 @@ class CustomDataset(Dataset):
         idx = int(image_file[3].strip('.png'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
 
-        mask = np.load(self.target_paths[index])
-        time_mask = self.get_time(mask.copy())
+        mask_cont = np.load(self.target_conts_paths[index])
+        mask_nao = np.load(self.target_nao_paths[index])
 
-        contact_mask, time_mask = self.get_contacts(mask.copy()), self.get_time(mask.astype(np.float32).copy())
+        contact_mask, time_mask = self.get_contacts(mask_cont.copy()), self.get_time(mask_nao.astype(np.float32).copy())
 
         overall_mask = np.zeros((2, 128, 228))
         time_mask = cv2.resize(time_mask, (228, 128), interpolation=cv2.INTER_LINEAR)
@@ -59,13 +63,14 @@ class CustomDataset(Dataset):
 
         overall_mask[0] = contact_mask
         overall_mask[1] = time_mask
-        overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
 
         flip = random.random() > 0.5
 
         if flip:
             image = hflip(image)
             overall_mask = np.flip(overall_mask, axis=1)
+
+        overall_mask = torch.from_numpy(overall_mask.copy()).type(torch.FloatTensor)
 
         overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
         overall_image = self.normalize(overall_image)
@@ -86,9 +91,9 @@ class CustomDataset(Dataset):
                 flow = np.load(last_flow_filename)[0]
 
             if flip:
-                flow = hflip(flow)
+                flow = np.flip(flow, axis=1)
 
-            flow = torch.from_numpy(flow).type(torch.FloatTensor)
+            flow = torch.from_numpy(flow.copy()).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, flow), 0)
 
             prev_image = image
@@ -354,7 +359,7 @@ def validate(test_loader, model, device, gamma=0.2):
             losses.append(loss.item())
     return np.mean(np.array(losses))
 
-def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
+def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_loss, gamma=0.2):
     model.train()
     pid = os.getpid()
 
@@ -389,7 +394,7 @@ def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
             if val_loss < best_loss:
                 best_loss = val_loss
                 print('Saving model -- epoch no. ', epoch)
-                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb.pt')
+                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_flow.pt')
             model.train()
     return best_loss
 
@@ -401,7 +406,8 @@ def main():
     image_data = sorted(glob.glob('./train/images/*'))
     flow_data = sorted(glob.glob('./train/flow/*'))
     mask_nao_data = sorted(glob.glob('./train/masks_nao/*'))
-    mask_cont_data = sorted(glob.glob('./train/masks_cont/*'))    device = torch.device("cuda")
+    mask_cont_data = sorted(glob.glob('./train/masks_cont/*'))
+    device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
     try:

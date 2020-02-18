@@ -13,6 +13,7 @@ from sklearn.metrics import jaccard_score as jsc
 from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
+import random
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
 
@@ -57,7 +58,7 @@ class CustomDataset(Dataset):
         seg_mask = cv2.resize(seg_mask, (228, 128), interpolation=cv2.INTER_NEAREST)
 
         overall_mask[0] = seg_mask
-        overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
+        overall_mask = torch.from_numpy(overall_mask.copy()).type(torch.FloatTensor)
 
         prev_image = image
 
@@ -72,9 +73,9 @@ class CustomDataset(Dataset):
                 flow = np.load(last_flow_filename)[0]
 
             if flip:
-                flow = hflip(flow)
+                flow = np.flip(flow, axis=1)
 
-            flow = torch.from_numpy(flow).type(torch.FloatTensor)
+            flow = torch.from_numpy(flow.copy()).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, flow), 0)
 
             prev_image = image
@@ -335,7 +336,7 @@ def validate(test_loader, model, device, gamma=0.2):
             sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
             jaccard = jsc(target_cont, sampled_cont)
             jaccards.append(jaccard)
-    return np.mean(np.array(losses)), np.mean(np.array(jaccards))
+    return np.mean(np.array(jaccards))
 
 def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_jaccard):
     model.train()
