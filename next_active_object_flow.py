@@ -390,7 +390,7 @@ def main():
         best_jaccard = checkpoint['jaccard']
     except Exception:
         s = 0
-        best_jaccard = 100
+        best_jaccard = 0
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
