@@ -64,6 +64,7 @@ class CustomDataset(Dataset):
 
             image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, image), 0)
+            image = self.normalize(image)
 
     #    masks = [torch.from_numpy(masks).type(torch.FloatTensor)]
         return overall_image, overall_mask
