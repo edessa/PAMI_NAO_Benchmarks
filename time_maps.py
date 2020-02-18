@@ -284,7 +284,7 @@ def validate(test_loader, model, device, gamma=0.2):
             losses.append(loss.item())
     return np.mean(np.array(losses))
 
-def train_epoch(epoch, model, device, data_loader, optimizer, best_loss, gamma=0.2):
+def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_loss, gamma=0.2):
     model.train()
     pid = os.getpid()
 
@@ -311,10 +311,10 @@ def train_epoch(epoch, model, device, data_loader, optimizer, best_loss, gamma=0
 
         if batch_idx % 32 == 0:
             val_loss = validate(test_loader, model, device)
-            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tContact: {:.6f} Time: {:.6f}\tBest Loss: {:.6f}'.format(
+            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tContact: {:.6f} Time: {:.6f}\tVal Loss: {:.6f}\tBest Loss: {:.6f}'.format(
                 pid, epoch, batch_idx * len(data), len(data_loader.dataset),
                 100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(var_gt[-100:])),
-                np.mean(np.array(var_out[-100:]))), best_loss)
+                np.mean(np.array(var_out[-100:])), val_loss, best_loss))
             if val_loss < best_loss:
                 best_loss = val_loss
                 print('Saving model -- epoch no. ', epoch)
@@ -329,6 +329,10 @@ def main():
     mask_nao_data = sorted(glob.glob('./train/masks_nao/*'))
     mask_cont_data = sorted(glob.glob('./train/masks_cont/*'))
 
+    image_val_data = sorted(glob.glob('./val/images/*'))
+    mask_nao_val_data = sorted(glob.glob('./val/masks_nao/*'))
+    mask_cont_val_data = sorted(glob.glob('./val/masks_cont/*'))
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
@@ -336,23 +340,18 @@ def main():
         checkpoint = torch.load('./weights/time_maps_rgb.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
-        best_loss = checkpoint['loss']
+        best_jaccard = checkpoint['jaccard']
     except Exception as err:
         s = 0
         best_loss = 100
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    indices = list(range(len(image_data)))
-    split = int(np.floor(0.9 * len(image_data)))
-    train_indices, test_indices = indices[:split], indices[split:]
-
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices)
-
     train_dataset = CustomDataset(image_data, mask_nao_data, mask_cont_data, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
+    test_dataset = CustomDataset(image_val_data, mask_nao_val_data, mask_cont_val_data, train=True)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
     print('Training session -- Time Maps')
     for epoch in range(s, 200):

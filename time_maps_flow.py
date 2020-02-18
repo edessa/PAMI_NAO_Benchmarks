@@ -324,6 +324,24 @@ def l1(output, target):
     loss = torch.mean(torch.abs(output[res] - target[res]))
     return loss
 
+def validate(test_loader, model, device, gamma=0.2):
+    model.eval()
+    losses = []
+    with torch.no_grad():
+        for batch_idx, (data, target) in enumerate(test_loader):
+            output = model(data.to(device))
+            target = target.to(device)
+
+            loss_1 = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
+            loss_2 = l1(output[:,1].reshape(-1,).to(device), target[:,1].reshape(-1,).to(device))
+
+            if not np.isnan(loss_2.item()):
+                loss = torch.add(loss_1, gamma*loss_2)
+            else:
+                loss = loss_1
+            losses.append(loss.item())
+    return np.mean(np.array(losses))
+
 def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
     model.train()
     pid = os.getpid()
@@ -351,28 +369,17 @@ def train_epoch(epoch, model, device, data_loader, optimizer, gamma=0.2):
             var_out.append(loss_2.item())
 
         if batch_idx % 32 == 0:
-            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tContact: {:.6f} Time: {:.6f}'.format(
+            val_loss = validate(test_loader, model, device)
+            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tContact: {:.6f} Time: {:.6f}\tBest Loss: {:.6f}'.format(
                 pid, epoch, batch_idx * len(data), len(data_loader.dataset),
                 100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(var_gt[-100:])),
-                np.mean(np.array(var_out[-100:]))))
-
-def validate(test_loader, model, device, gamma=0.2):
-    model.eval()
-    losses = []
-    with torch.no_grad():
-        for batch_idx, (data, target) in enumerate(test_loader):
-            output = model(data.to(device))
-            target = target.to(device)
-
-            loss_1 = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
-            loss_2 = l1(output[:,1].reshape(-1,).to(device), target[:,1].reshape(-1,).to(device))
-
-            if not np.isnan(loss_2.item()):
-                loss = torch.add(loss_1, gamma*loss_2)
-            else:
-                loss = loss_1
-            losses.append(loss.item())
-    return np.mean(np.array(losses))
+                np.mean(np.array(var_out[-100:]))), best_loss)
+            if val_loss < best_loss:
+                best_loss = val_loss
+                print('Saving model -- epoch no. ', epoch)
+                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb.pt')
+            model.train()
+    return best_loss
 
 def main():
     num_classes = 2
@@ -396,30 +403,20 @@ def main():
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    indices = list(range(len(image_data)))
-    split = int(np.floor(0.9 * len(image_data)))
-    train_indices, test_indices = indices[:split], indices[split:]
-
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices)
-
     image_val_data = sorted(glob.glob('./val/images/*'))
     flow_val_data = sorted(glob.glob('./val/flow/*'))
     mask_val_data = sorted(glob.glob('./val/masks/*'))
 
     train_dataset = CustomDataset(image_data, flow_data, mask_data, clip_length=clip_length, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
+    val_dataset = CustomDataset(image_val_data, flow_val_data, mask_val_data, clip_length=clip_length, train=True)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, num_workers=1)
 
     print('Training session -- Time Maps (Flow)')
-    for epoch in range(s, 150):
-        loss = validate(test_loader, net, device)
-        print('Validation:', loss, best_loss)
-        if loss < best_loss:
-            print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'loss': loss, 'model_state_dict': net.state_dict()}, './weights/time_maps_flow.pt')
-            best_loss = loss
-        train_epoch(epoch, net, device, train_loader, optimizer)
+    for epoch in range(s, 200):
+        best_loss = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_loss)
+
 
 if __name__ == '__main__':
     main()

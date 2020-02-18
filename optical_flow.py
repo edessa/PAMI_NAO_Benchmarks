@@ -15,7 +15,7 @@ import pickle
 from PIL import Image
 from multiprocessing import Pool
 
-image_folder='./val'
+image_folder='./person/train'
 image_path = sorted(glob.glob(  image_folder + '/images/*'))
 
 def generate_optical_flow(index):

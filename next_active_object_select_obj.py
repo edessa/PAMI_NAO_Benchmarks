@@ -308,7 +308,7 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
             if val_jaccard > best_jaccard:
                 best_jaccard = val_jaccard
                 print('Saving model -- epoch no. ', epoch)
-                torch.save({'epoch': epoch, 'jaccard': val_jaccard, 'model_state_dict': model.state_dict()}, './weights/nao.pt')
+                torch.save({'epoch': epoch, 'jaccard': val_jaccard, 'model_state_dict': model.state_dict()}, './weights/nao_selective.pt')
             model.train()
     return best_jaccard
 
@@ -334,7 +334,7 @@ def main():
         checkpoint = torch.load('./weights/nao.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
-        best_jaccard = checkpoint['loss']
+        best_jaccard = checkpoint['jaccard']
     except Exception:
         s = 0
         best_jaccard = 0
@@ -349,12 +349,14 @@ def main():
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    #image_val_data = sorted(glob.glob('./val/images/*'))
-    #mask_val_data = sorted(glob.glob('./val/masks/*'))
+    image_val_data = sorted(glob.glob('./val/images/*'))
+    mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
 
     train_dataset = CustomDataset(image_data, mask_data, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
+    test_dataset = CustomDataset(image_val_data, mask_val_data, train=True)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):

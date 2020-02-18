@@ -323,7 +323,7 @@ def main():
         checkpoint = torch.load('./weights/nao.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
-        best_jaccard = checkpoint['loss']
+        best_jaccard = checkpoint['jaccard']
     except Exception:
         s = 0
         best_jaccard = 0
@@ -338,12 +338,14 @@ def main():
     train_sampler = SubsetRandomSampler(train_indices)
     test_sampler = SubsetRandomSampler(test_indices)
 
-    #image_val_data = sorted(glob.glob('./val/images/*'))
-    #mask_val_data = sorted(glob.glob('./val/masks/*'))
+    image_val_data = sorted(glob.glob('./val/images/*'))
+    mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
 
     train_dataset = CustomDataset(image_data, mask_data, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
+    test_dataset = CustomDataset(image_val_data, mask_val_data, train=True)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):

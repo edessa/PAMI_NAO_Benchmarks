@@ -357,7 +357,7 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
                 torch.save({'epoch': epoch, 'jaccard': val_jaccard, 'model_state_dict': model.state_dict()}, './weights/nao_flow.pt')
             model.train()
     return best_jaccard
-    
+
 def main():
     num_classes = 1
     clip_length = 3
@@ -372,10 +372,10 @@ def main():
         checkpoint = torch.load('./weights/nao_flow.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
-        best_loss = checkpoint['loss']
+        best_jaccard = checkpoint['jaccard']
     except Exception:
         s = 0
-        best_loss = 100
+        best_jaccard = 100
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
@@ -391,8 +391,10 @@ def main():
     mask_val_data = sorted(glob.glob('./val/masks/*'))
 
     train_dataset = CustomDataset(image_data, flow_data, mask_data, clip_length=clip_length, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16,num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
+    test_dataset = CustomDataset(image_val_data, flow_val_data, mask_val_data, clip_length=clip_length, train=True)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16,num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
     print('Training session -- Next Active Object Flow')
     for epoch in range(s, 200):

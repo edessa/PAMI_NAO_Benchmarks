@@ -273,7 +273,6 @@ def validate(test_loader, model, device, gamma=0.2):
     model.eval()
     losses = []
     jaccards = []
-
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
             output = model(data.to(device))
@@ -285,7 +284,7 @@ def validate(test_loader, model, device, gamma=0.2):
             sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
             jaccard = jsc(target_cont, sampled_cont)
             jaccards.append(jaccard)
-    return np.mean(np.array(losses)), np.mean(np.array(jaccards))
+    return np.mean(np.array(jaccards))
 
 def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_jaccard):
     model.train()
@@ -326,7 +325,7 @@ def main():
     clip_length = 3
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
-    mask_data = sorted(glob.glob('./train/masks/*'))
+    mask_data = sorted(glob.glob('./train/masks_nao/*'))
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
@@ -334,26 +333,21 @@ def main():
         checkpoint = torch.load('./weights/nao_multiple_frames.pt')
         net.load_state_dict(checkpoint['model_state_dict'])
         s = checkpoint['epoch']
-        best_loss = checkpoint['loss']
+        best_jaccard = checkpoint['jaccard']
     except Exception:
         s = 0
-        best_loss = 100
+        best_jaccard = 0
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    indices = list(range(len(image_data)))
-    split = int(np.floor(0.9 * len(image_data)))
-    train_indices, test_indices = indices[:split], indices[split:]
-
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices)
-
     image_val_data = sorted(glob.glob('./val/images/*'))
-    mask_val_data = sorted(glob.glob('./val/masks/*'))
+    mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
 
     train_dataset = CustomDataset(image_data, mask_data, clip_length=clip_length, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
+    test_dataset = CustomDataset(image_val_data, mask_val_data, clip_length=clip_length, train=True)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
     print('Training session -- Next Active Object Multiple Frames')
     for epoch in range(s, 200):
