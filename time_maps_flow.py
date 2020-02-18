@@ -17,7 +17,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, flow_paths, target_paths, clip_length = 1, train=True):
+    def __init__(self, image_paths, target_nao_paths, target_conts_paths, clip_length = 1, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
      self.flow_paths = flow_paths
@@ -47,9 +47,7 @@ class CustomDataset(Dataset):
         flow_file = self.flow_paths[index].split('_')
         idx = int(image_file[3].strip('.png'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
-        overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-        overall_image = self.normalize(overall_image)
-        
+
         mask = np.load(self.target_paths[index])
         time_mask = self.get_time(mask.copy())
 
@@ -68,6 +66,9 @@ class CustomDataset(Dataset):
         if flip:
             image = hflip(image)
             overall_mask = np.flip(overall_mask, axis=1)
+
+        overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
+        overall_image = self.normalize(overall_image)
 
         img_size = (228, 128)
         last_img_filename = 'h'
@@ -399,8 +400,8 @@ def main():
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
     flow_data = sorted(glob.glob('./train/flow/*'))
-    mask_data = sorted(glob.glob('./train/masks/*'))
-    device = torch.device("cuda")
+    mask_nao_data = sorted(glob.glob('./train/masks_nao/*'))
+    mask_cont_data = sorted(glob.glob('./train/masks_cont/*'))    device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
     try:
@@ -416,10 +417,11 @@ def main():
 
     image_val_data = sorted(glob.glob('./val/images/*'))
     flow_val_data = sorted(glob.glob('./val/flow/*'))
-    mask_val_data = sorted(glob.glob('./val/masks/*'))
+    mask_nao_val_data = sorted(glob.glob('./val/masks_nao/*'))
+    mask_cont_val_data = sorted(glob.glob('./val/masks_cont/*'))
 
-    train_dataset = CustomDataset(image_data, flow_data, mask_data, clip_length=clip_length, train=True)
-    val_dataset = CustomDataset(image_val_data, flow_val_data, mask_val_data, clip_length=clip_length, train=True)
+    train_dataset = CustomDataset(image_data, flow_data, mask_nao_data, mask_cont_data, clip_length=clip_length, train=True)
+    val_dataset = CustomDataset(image_val_data, flow_val_data, mask_nao_val_data, mask_cont_val_data, clip_length=clip_length, train=True)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, num_workers=1)

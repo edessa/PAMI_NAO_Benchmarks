@@ -38,16 +38,16 @@ class CustomDataset(Dataset):
         time_file = self.time_paths[index].split('_')
         idx = int(time_file[6].strip('.npy'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
-        image = self.normalize(image)
-        
-        overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-
         mask = np.load(self.target_paths[index])
 
         flip = random.random() > 0.5
+
         if flip:
             image = hflip(image)
             mask = np.array(hflip(Image.fromarray(mask)))
+
+        overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
+        overall_image = self.normalize(overall_image)
 
         seg_mask = self.get_seg(mask.copy())
 
@@ -69,8 +69,10 @@ class CustomDataset(Dataset):
             except Exception:
                 time_map = np.load(last_filename)
                 time_map = cv2.resize(time_map, (228, 128), interpolation=cv2.INTER_LINEAR)
+
             if flip:
                 time_map = hflip(time_map)
+                
             time_map = torch.from_numpy(time_map.reshape(1, 128, 228)).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, time_map), 0)
 

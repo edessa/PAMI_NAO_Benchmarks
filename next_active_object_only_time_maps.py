@@ -14,6 +14,7 @@ from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
+from torchvision.transforms.functional import hflip
 
 class CustomDataset(Dataset):
     def __init__(self, time_paths, target_paths, clip_length = 1, train=True):
@@ -36,7 +37,13 @@ class CustomDataset(Dataset):
         time_file = self.time_paths[index].split('_')
         idx = int(time_file[6].strip('.npy'))
         overall_image = None
+
         mask = np.load(self.target_paths[index])
+
+        flip = random.random() > 0.5
+
+        if flip:
+            mask = np.array(hflip(Image.fromarray(mask)))
 
         seg_mask = self.get_seg(mask.copy())
 
@@ -59,7 +66,11 @@ class CustomDataset(Dataset):
                 time_map = np.load(last_filename)
                 time_map = cv2.resize(time_map, (228, 128), interpolation=cv2.INTER_LINEAR)
 
+            if flip:
+                time_map = hflip(time_map)
+
             time_map = torch.from_numpy(time_map.reshape(1, 128, 228)).type(torch.FloatTensor)
+            
             if overall_image is None:
                 overall_image = time_map
             else:

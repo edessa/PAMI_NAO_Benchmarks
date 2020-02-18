@@ -23,7 +23,7 @@ class CustomDataset(Dataset):
      self.flow_paths = flow_paths
      self.clip_length = clip_length
      self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])     
+                                 std=[0.229, 0.224, 0.225])
      self.len = len(image_paths)
 
     def get_seg(self, mask):
@@ -40,9 +40,6 @@ class CustomDataset(Dataset):
         flow_file = self.flow_paths[index].split('_')
         idx = int(flow_file[3].strip('.npy'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
-        overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-        overall_image = self.normalize(overall_image)
-
         mask = np.load(self.target_paths[index])
 
         flip = random.random() > 0.5
@@ -50,6 +47,9 @@ class CustomDataset(Dataset):
         if flip:
             image = hflip(image)
             mask = np.array(hflip(Image.fromarray(mask)))
+
+        overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
+        overall_image = self.normalize(overall_image)
 
         seg_mask = self.get_seg(mask.copy())
 
@@ -377,7 +377,8 @@ def main():
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
     flow_data = sorted(glob.glob('./train/flow/*'))
-    mask_data = sorted(glob.glob('./train/masks/*'))
+    mask_data = sorted(glob.glob('./train/masks_nao/*'))
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
@@ -401,7 +402,7 @@ def main():
 
     image_val_data = sorted(glob.glob('./val/images/*'))
     flow_val_data = sorted(glob.glob('./val/flow/*'))
-    mask_val_data = sorted(glob.glob('./val/masks/*'))
+    mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
 
     train_dataset = CustomDataset(image_data, flow_data, mask_data, clip_length=clip_length, train=True)
     test_dataset = CustomDataset(image_val_data, flow_val_data, mask_val_data, clip_length=clip_length, train=True)

@@ -37,9 +37,11 @@ class CustomDataset(Dataset):
         image = Image.open(self.image_paths[index])
         image = image.resize((228, 128))
         mask = np.load(self.target_paths[index])
+
         if random.random() > 0.5:
             image = hflip(image)
             mask = np.array(hflip(Image.fromarray(mask)))
+            
         seg_mask = self.get_seg(mask.copy())
 
         overall_mask = np.zeros((1, 128, 228))

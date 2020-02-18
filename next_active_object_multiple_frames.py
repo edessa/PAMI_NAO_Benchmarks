@@ -14,6 +14,7 @@ from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
+import random
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, target_paths, clip_length = 1, train=True):
@@ -38,10 +39,16 @@ class CustomDataset(Dataset):
         image_file = self.image_paths[index].split('_')
         idx = int(image_file[3].strip('.png'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
+        mask = np.load(self.target_paths[index])
+
+        flip = random.random() > 0.5
+
+        if flip:
+            image = hflip(image)
+            mask = np.array(hflip(Image.fromarray(mask)))
 
         overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
 
-        mask = np.load(self.target_paths[index])
         seg_mask = self.get_seg(mask.copy())
 
         overall_mask = np.zeros((1, 128, 228))
@@ -63,6 +70,8 @@ class CustomDataset(Dataset):
             except Exception:
                 image = Image.open(last_img_filename).resize(img_size, Image.NEAREST)
 
+            if flip:
+                image = hflip(image)
             image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
             image = self.normalize(image)
             overall_image = torch.cat((overall_image, image), 0)
