@@ -38,11 +38,10 @@ def cleanup_obj(image_files, objs):
         for row in reader:
             if int(row['noun_class']) in objs:
                 if row['uid'] in my_list:
-                    if row['noun_class'] not in a.keys():
-                        a[row['noun_class']] = 1
+                    if int(row['noun_class']) not in a.keys():
+                        a[int(row['noun_class'])] = 1
                     else:
-                        a[row['noun_class']] += 1
-                    t += 1
+                        a[int(row['noun_class'])] += 1
                     selected_uids.append(int(row['uid']))
 
     unique_selected_uids = np.unique(np.array(selected_uids))

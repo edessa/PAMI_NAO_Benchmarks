@@ -317,6 +317,7 @@ def main():
     mask_data = sorted(glob.glob('./train/masks_nao/*'))
 
     obj_idxs, obj_hist = np.array(cleanup_obj(image_data, list(range(500))))
+    obj_hist = dict(sorted(obj_hist.items()))
     print(obj_hist)
     image_data = list(image_data[i] for i in obj_idxs)
     mask_data = list(mask_data[i] for i in obj_idxs)
