@@ -1,5 +1,5 @@
 *
 
 !*.py
-!evaluations/*
+!./evaluations/*
 !README.txt
