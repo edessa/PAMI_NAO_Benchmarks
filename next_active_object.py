@@ -306,6 +306,8 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
                 100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:])), val_jaccard, best_jaccard))
             if val_jaccard > best_jaccard:
                 best_jaccard = val_jaccard
+                print('Saving model -- epoch no. ', epoch)
+                torch.save({'epoch': epoch, 'jaccard': val_jaccard, 'model_state_dict': model.state_dict()}, './weights/nao.pt')
             model.train()
     return best_jaccard
 
@@ -345,11 +347,7 @@ def main():
 
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):
-        jaccard = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard)
-        if jaccard > best_jaccard:
-            print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'loss': jaccard, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
-            best_jaccard = jaccard
+        best_jaccard = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard)
 
 if __name__ == '__main__':
     main()

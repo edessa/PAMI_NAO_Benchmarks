@@ -307,6 +307,8 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
                 100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:])), val_jaccard, best_jaccard))
             if val_jaccard > best_jaccard:
                 best_jaccard = val_jaccard
+                print('Saving model -- epoch no. ', epoch)
+                torch.save({'epoch': epoch, 'jaccard': val_jaccard, 'model_state_dict': model.state_dict()}, './weights/nao.pt')
             model.train()
     return best_jaccard
 
@@ -315,10 +317,11 @@ def main():
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
     mask_data = sorted(glob.glob('./train/masks_nao/*'))
-
-    obj_idxs, obj_hist = np.array(cleanup_obj(image_data, list(range(500))))
+    subset = [1, 4, 6, 11, 15, 17, 19, 20, 21, 22, 23, 24, 25, 26, 28, 29, 32, 39, 43, 47, 48, 51, 52, 59, 60, 62, 63, 65, 66, 69, 70, 71, 72, 73, 76, 77, 80, 81, 85, 86, 93, 97, 98, 102, 105]
+    obj_idxs, obj_hist = np.array(cleanup_obj(image_data, subset))
     obj_hist = dict(sorted(obj_hist.items()))
     print(obj_hist)
+    print(subset)
     image_data = list(image_data[i] for i in obj_idxs)
     mask_data = list(mask_data[i] for i in obj_idxs)
 
@@ -355,11 +358,7 @@ def main():
 
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):
-        jaccard = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard)
-        if jaccard > best_jaccard:
-            print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'loss': jaccard, 'model_state_dict': net.state_dict()}, './weights/nao.pt')
-            best_jaccard = jaccard
+        best_jaccard = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard)
 
 if __name__ == '__main__':
     main()

@@ -307,7 +307,24 @@ def l1(output, target):
     loss = torch.mean(torch.abs(output[res] - target[res]))
     return loss
 
-def train_epoch(epoch, model, device, data_loader, optimizer):
+def validate(test_loader, model, device, gamma=0.2):
+    model.eval()
+    losses = []
+    jaccards = []
+    with torch.no_grad():
+        for batch_idx, (data, target) in enumerate(test_loader):
+            output = model(data.to(device))
+            target = target.to(device)
+            loss = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
+            losses.append(loss.item())
+            target_cont = target[:,0].data.cpu().numpy().reshape(-1)
+            out_probs_cont = output[:,0].data.cpu().numpy().reshape(-1)
+            sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
+            jaccard = jsc(target_cont, sampled_cont)
+            jaccards.append(jaccard)
+    return np.mean(np.array(losses)), np.mean(np.array(jaccards))
+
+def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_jaccard):
     model.train()
     pid = os.getpid()
 
@@ -330,27 +347,17 @@ def train_epoch(epoch, model, device, data_loader, optimizer):
         accs.append(loss.item())
         conts.append(jaccard)
         if batch_idx % 32 == 0:
-            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tJac: {:.6f}'.format(
+            val_jaccard = validate(test_loader, model, device)
+            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tJac: {:.6f}\tVal Jac: {:.6f}\tBest Val Jac: {:.6f}'.format(
                 pid, epoch, batch_idx * len(data), len(data_loader.dataset),
-                100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:]))))
-
-def validate(test_loader, model, device, gamma=0.2):
-    model.eval()
-    losses = []
-    jaccards = []
-    with torch.no_grad():
-        for batch_idx, (data, target) in enumerate(test_loader):
-            output = model(data.to(device))
-            target = target.to(device)
-            loss = loss_seg_fn(output[:,0].reshape(-1,).to(device), target[:,0].reshape(-1,).to(device))
-            losses.append(loss.item())
-            target_cont = target[:,0].data.cpu().numpy().reshape(-1)
-            out_probs_cont = output[:,0].data.cpu().numpy().reshape(-1)
-            sampled_cont = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
-            jaccard = jsc(target_cont, sampled_cont)
-            jaccards.append(jaccard)
-    return np.mean(np.array(losses)), np.mean(np.array(jaccards))
-
+                100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(conts[-100:])), val_jaccard, best_jaccard))
+            if val_jaccard > best_jaccard:
+                best_jaccard = val_jaccard
+                print('Saving model -- epoch no. ', epoch)
+                torch.save({'epoch': epoch, 'jaccard': val_jaccard, 'model_state_dict': model.state_dict()}, './weights/nao_flow.pt')
+            model.train()
+    return best_jaccard
+    
 def main():
     num_classes = 1
     clip_length = 3
@@ -389,13 +396,7 @@ def main():
 
     print('Training session -- Next Active Object Flow')
     for epoch in range(s, 200):
-        loss, jaccard = validate(test_loader, net, device)
-        print('Validation:', loss, best_loss, jaccard)
-        if loss < best_loss:
-            print('Saving model -- epoch no. ', epoch)
-            torch.save({'epoch': epoch, 'loss': loss,'model_state_dict': net.state_dict()}, './weights/nao_flow.pt')
-            best_loss = loss
-        train_epoch(epoch, net, device, train_loader, optimizer)
+        best_jaccard = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard)
 
 
 if __name__ == '__main__':
