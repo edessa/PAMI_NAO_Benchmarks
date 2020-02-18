@@ -387,14 +387,14 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
 
         if batch_idx % 32 == 0:
             val_loss = validate(test_loader, model, device)
-            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tContact: {:.6f} Time: {:.6f}\tBest Loss: {:.6f}'.format(
+            print('{}\tTrain Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tContact: {:.6f} Time: {:.6f}\tVal Loss: {:.6f}\tBest Loss: {:.6f}'.format(
                 pid, epoch, batch_idx * len(data), len(data_loader.dataset),
                 100. * batch_idx / len(data_loader), np.mean(np.array(accs[-100:])), np.mean(np.array(var_gt[-100:])),
-                np.mean(np.array(var_out[-100:]))), best_loss)
+                np.mean(np.array(var_out[-100:])), val_loss, best_loss))
             if val_loss < best_loss:
                 best_loss = val_loss
                 print('Saving model -- epoch no. ', epoch)
-                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_flow.pt')
+                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb.pt')
             model.train()
     return best_loss
 
