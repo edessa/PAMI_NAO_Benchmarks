@@ -394,7 +394,7 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
             if val_loss < best_loss:
                 best_loss = val_loss
                 print('Saving model -- epoch no. ', epoch)
-                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb.pt')
+                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_flow.pt')
             model.train()
     return best_loss
 
