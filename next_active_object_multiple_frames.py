@@ -38,6 +38,7 @@ class CustomDataset(Dataset):
         image_file = self.image_paths[index].split('_')
         idx = int(image_file[3].strip('.png'))
         image = Image.open(self.image_paths[index]).resize((228, 128))
+
         overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
 
         mask = np.load(self.target_paths[index])
@@ -63,8 +64,8 @@ class CustomDataset(Dataset):
                 image = Image.open(last_img_filename).resize(img_size, Image.NEAREST)
 
             image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
-            overall_image = torch.cat((overall_image, image), 0)
             image = self.normalize(image)
+            overall_image = torch.cat((overall_image, image), 0)
 
     #    masks = [torch.from_numpy(masks).type(torch.FloatTensor)]
         return overall_image, overall_mask

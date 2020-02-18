@@ -15,13 +15,16 @@ from skimage.transform import resize
 import cv2
 import math
 from torch.utils.data.sampler import SubsetRandomSampler
+from torchvision.transforms.functional import hflip
+import random
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, target_nao_paths, target_conts_paths, train=True):
      self.image_paths = image_paths
      self.target_nao_paths = target_nao_paths
      self.target_conts_paths = target_conts_paths
-
+     self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
      self.len = len(image_paths)
 
     def get_contacts(self, mask):
@@ -54,17 +57,20 @@ class CustomDataset(Dataset):
         overall_mask = np.zeros((2, 128, 228))
         time_mask = cv2.resize(time_mask, (228, 128), interpolation=cv2.INTER_LINEAR)
         contact_mask = cv2.resize(contact_mask, (228, 128), interpolation=cv2.INTER_NEAREST)
-        #print(a_1, a_2)
 
-        overall_mask[0] = contact_mask
-        overall_mask[1] = time_mask
+        overall_mask[0] = np.array(contact_mask)
+        overall_mask[1] = np.array(time_mask)
 
-        overall_mask = torch.from_numpy(overall_mask).type(torch.FloatTensor)
-        #print(overall_mask[1][np.where(overall_mask[1] > 0)])
+        flip = random.random() > 0.5
+        if flip:
+            image = hflip(image)
+            overall_mask = np.flip(overall_mask, axis=1)
+
+        overall_mask = torch.from_numpy(overall_mask.copy()).type(torch.FloatTensor)
 
         image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
         image = self.normalize(image)
-        
+
         return image, overall_mask
 
     def __len__(self):

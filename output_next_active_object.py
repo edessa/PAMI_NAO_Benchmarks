@@ -17,23 +17,33 @@ num_classes = 1
 device = torch.device("cuda")
 
 net = FCN8s(num_classes).to(device)
-checkpoint = torch.load('/home/lab/Object_Split/curr_weights/weights/nao.pt')
-net.load_state_dict(checkpoint)
+checkpoint = torch.load('/home/lab/Object_Split/weights/nao.pt')
+net.load_state_dict(checkpoint['model_state_dict'])
 net.eval()
 
 clip_length = 4
-image_val_data = sorted(glob.glob('./train/images/*'))
-flow_val_data = sorted(glob.glob('./train/flow/*'))
+image_val_data = sorted(glob.glob('./val/images/*'))
+flow_val_data = sorted(glob.glob('./val/flow/*'))
 #time_val_data = sorted(glob.glob('./train/time_map_data_rgb/*'))
-mask_val_data = sorted(glob.glob('./train/masks/*'))
+mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
 
-test_loader = CustomDataset(image_val_data, mask_val_data, train=True)
-test_loader = torch.utils.data.DataLoader(test_loader, shuffle=False, batch_size=1, num_workers=1)
+test_loader = CustomDataset(image_val_data, mask_val_data, train=False)
+test_loader = torch.utils.data.DataLoader(test_loader, shuffle=False, batch_size=16, num_workers=1)
 
 count = 0
-
+jaccards = []
 with torch.no_grad():
     for batch_idx, (test_images, test_labels) in enumerate(test_loader):
         output = net(test_images.to(device))
-        np.save('./train/nao_predictions/' + image_val_data[count].replace('./train/images/', '').replace('.png', ''), output.data.cpu().numpy())
-        count += 1
+        out_probs_cont = output.data.cpu().numpy().reshape(-1)
+        output_mask = (np.random.rand(len(out_probs_cont)) < out_probs_cont).astype(int)
+        gt_mask = test_labels.reshape(-1,).data.cpu().numpy()
+
+        jaccard = jsc(gt_mask, output_mask)
+        jaccards.append(jaccard)
+        print(jaccard, output.shape)
+        for b_idx in range(16):
+            np.save('./val/nao_predictions/' + image_val_data[count].replace('./val/images/', '').replace('.png', ''), output[b_idx].data.cpu().numpy())
+            count += 1
+print('jac', np.mean(np.array(jaccards)))
+print('best', checkpoint['jaccard'])

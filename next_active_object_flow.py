@@ -14,6 +14,7 @@ from torch.autograd import Variable
 from skimage.transform import resize
 import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
+from torchvision.transforms.functional import hflip
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, flow_paths, target_paths, clip_length = 1, train=True):
@@ -21,6 +22,8 @@ class CustomDataset(Dataset):
      self.target_paths = target_paths
      self.flow_paths = flow_paths
      self.clip_length = clip_length
+     self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])     
      self.len = len(image_paths)
 
     def get_seg(self, mask):
@@ -41,6 +44,13 @@ class CustomDataset(Dataset):
         overall_image = self.normalize(overall_image)
 
         mask = np.load(self.target_paths[index])
+
+        flip = random.random() > 0.5
+
+        if flip:
+            image = hflip(image)
+            mask = np.array(hflip(Image.fromarray(mask)))
+
         seg_mask = self.get_seg(mask.copy())
 
         overall_mask = np.zeros((1, 128, 228))
@@ -56,12 +66,15 @@ class CustomDataset(Dataset):
             flow_filename = '_'.join(flow_file)
 
             try:
-                flow = np.load(flow_filename)
+                flow = np.load(flow_filename)[0]
                 last_flow_filename = flow_filename
             except Exception:
-                flow = np.load(last_flow_filename)
+                flow = np.load(last_flow_filename)[0]
 
-            flow = torch.from_numpy(flow[0]).type(torch.FloatTensor)
+            if flip:
+                flow = hflip(flow)
+
+            flow = torch.from_numpy(flow).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, flow), 0)
 
             prev_image = image
