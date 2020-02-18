@@ -2,4 +2,5 @@
 !evaluations/
 
 !*.py
+!*.csv
 !README.txt
