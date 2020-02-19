@@ -70,7 +70,7 @@ class CustomDataset(Dataset):
                 time_map = hflip(time_map)
 
             time_map = torch.from_numpy(time_map.reshape(1, 128, 228)).type(torch.FloatTensor)
-            
+
             if overall_image is None:
                 overall_image = time_map
             else:
@@ -334,6 +334,9 @@ def main():
     mask_data = sorted(glob.glob('./train/masks/*'))
     time_data = sorted(glob.glob('./train/time_map_data_rgb/*'))
 
+    mask_val_data = sorted(glob.glob('./val/masks/*'))
+    time_val_data = sorted(glob.glob('./val/time_map_data_rgb/*'))
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
@@ -348,16 +351,11 @@ def main():
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    indices = list(range(len(time_data)))
-    split = int(np.floor(0.9 * len(time_data)))
-    train_indices, test_indices = indices[:split], indices[split:]
-
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices)
-
     train_dataset = CustomDataset(time_data, mask_data, clip_length=clip_length, train=True)
-    train_loader = torch.utils.data.DataLoader(train_dataset, sampler=train_sampler, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(train_dataset, sampler=test_sampler, batch_size=16, num_workers=1)
+    test_dataset = CustomDataset(time_val_data, mask_val_data, clip_length=clip_length, augment=False, train=True)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, augment=False, num_workers=1)
 
     print('Training session -- Next Active Object Time Maps')
     for epoch in range(s, 200):

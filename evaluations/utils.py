@@ -7,7 +7,7 @@ from torch import nn
 import csv
 import os
 
-def cleanup_obj(image_files, objs):
+def cleanup_obj(image_files, objs, filename='./evaluations/EPIC_train_action_labels.csv'):
     interested_uids = []
     filename_list = []
     selected_filepath = []
@@ -32,17 +32,18 @@ def cleanup_obj(image_files, objs):
                     object_list.append(objectclass)
                     person_list.append(person)
     unique_object = np.unique(np.array(object_list))
-    a = {}
-
+    noun_hist = {}
+    uid_to_obj = {}
     with open('./evaluations/EPIC_train_action_labels.csv') as f:
         reader = list(csv.DictReader(f))
         for row in reader:
+            uid_to_obj[row['uid']] = row['noun_class']
             if int(row['noun_class']) in objs:
                 if row['uid'] in my_list:
-                    if int(row['noun_class']) not in a.keys():
-                        a[int(row['noun_class'])] = 1
+                    if int(row['noun_class']) not in noun_hist.keys():
+                        noun_hist[int(row['noun_class'])] = 1
                     else:
-                        a[int(row['noun_class'])] += 1
+                        noun_hist[int(row['noun_class'])] += 1
                     selected_uids.append(int(row['uid']))
 
     unique_selected_uids = np.unique(np.array(selected_uids))
@@ -52,7 +53,7 @@ def cleanup_obj(image_files, objs):
         if int(uidname) in unique_selected_uids:
             selected_filepath.append(i)
 
-    return selected_filepath, a
+    return selected_filepath, noun_hist, uid_to_obj
 
 def loss_seg_fn(output, target):
     weight = torch.tensor([1.0]).cuda()

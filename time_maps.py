@@ -17,14 +17,16 @@ import math
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
 import random
+from evaluations.utils import cleanup_obj
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, target_nao_paths, target_conts_paths, train=True):
+    def __init__(self, image_paths, target_nao_paths, target_conts_paths, augment=True, train=True):
      self.image_paths = image_paths
      self.target_nao_paths = target_nao_paths
      self.target_conts_paths = target_conts_paths
      self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
+     self.augment = augment                             
      self.len = len(image_paths)
 
     def get_contacts(self, mask):
@@ -61,7 +63,11 @@ class CustomDataset(Dataset):
         overall_mask[0] = np.array(contact_mask)
         overall_mask[1] = np.array(time_mask)
 
-        flip = random.random() > 0.5
+        if self.augment:
+            flip = random.random() > 0.5
+        else:
+            flip = 0
+
         if flip:
             image = hflip(image)
             overall_mask = np.flip(overall_mask, axis=1)
@@ -341,6 +347,18 @@ def main():
     mask_nao_val_data = sorted(glob.glob('./val/masks_nao/*'))
     mask_cont_val_data = sorted(glob.glob('./val/masks_cont/*'))
 
+    subset = list(set(list(range(500))) - set([5, 7, 16, 18, 23, 134, 108]))
+
+    obj_idxs, obj_hist, _ = np.array(cleanup_obj(image_data, subset))
+    image_data = list(image_data[i] for i in obj_idxs)
+    mask_nao_data = list(mask_nao_data[i] for i in obj_idxs)
+    mask_cont_data = list(mask_cont_data[i] for i in obj_idxs)
+
+    obj_idxs, obj_hist, _ = np.array(cleanup_obj(image_val_data, subset))
+    image_val_data = list(image_val_data[i] for i in obj_idxs)
+    mask_nao_val_data = list(mask_nao_val_data[i] for i in obj_idxs)
+    mask_cont_val_data = list(mask_cont_val_data[i] for i in obj_idxs)
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
@@ -356,7 +374,7 @@ def main():
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     train_dataset = CustomDataset(image_data, mask_nao_data, mask_cont_data, train=True)
-    test_dataset = CustomDataset(image_val_data, mask_nao_val_data, mask_cont_val_data, train=True)
+    test_dataset = CustomDataset(image_val_data, mask_nao_val_data, mask_cont_val_data, augment=False, train=True)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
@@ -364,8 +382,6 @@ def main():
     print('Training session -- Time Maps')
     for epoch in range(s, 200):
         best_loss = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_loss)
-
-
 
 if __name__ == '__main__':
     main()

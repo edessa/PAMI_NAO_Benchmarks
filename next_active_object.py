@@ -16,14 +16,15 @@ import cv2
 import random
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
+from evaluations.utils import cleanup_obj
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, target_paths, train=True):
+    def __init__(self, image_paths, target_paths, augment=True, train=True):
      self.image_paths = image_paths
      self.target_paths = target_paths
      self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
-
+     self.augment = augment
      self.len = len(image_paths)
 
     def get_seg(self, mask):
@@ -38,10 +39,15 @@ class CustomDataset(Dataset):
         image = image.resize((228, 128))
         mask = np.load(self.target_paths[index])
 
-        if random.random() > 0.5:
+        if self.augment:
+            flip = random.random() > 0.5
+        else:
+            flip = 0
+
+        if flip:
             image = hflip(image)
             mask = np.array(hflip(Image.fromarray(mask)))
-            
+
         seg_mask = self.get_seg(mask.copy())
 
         overall_mask = np.zeros((1, 128, 228))
@@ -318,6 +324,20 @@ def main():
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
     mask_data = sorted(glob.glob('./train/masks_nao/*'))
+
+    image_val_data = sorted(glob.glob('./val/images/*'))
+    mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
+
+    subset = list(set(list(range(500))) - set([5, 7, 16, 18, 23, 134, 108]))
+
+    obj_idxs, obj_hist, _ = np.array(cleanup_obj(image_data, subset))
+    image_data = list(image_data[i] for i in obj_idxs)
+    mask_data = list(mask_data[i] for i in obj_idxs)
+
+    obj_idxs, obj_hist, _ = np.array(cleanup_obj(image_val_data, subset))
+    image_val_data = list(image_val_data[i] for i in obj_idxs)
+    mask_val_data = list(mask_val_data[i] for i in obj_idxs)
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
@@ -332,19 +352,8 @@ def main():
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    indices = list(range(len(image_data)))
-
-    split = int(np.floor(0.9 * len(image_data)))
-    train_indices, test_indices = indices[:split], indices[split:]
-
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices)
-
-    image_val_data = sorted(glob.glob('./val/images/*'))
-    mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
-
     train_dataset = CustomDataset(image_data, mask_data, train=True)
-    test_dataset = CustomDataset(image_val_data, mask_val_data, train=True)
+    test_dataset = CustomDataset(image_val_data, mask_val_data, augment=False, train=True)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)

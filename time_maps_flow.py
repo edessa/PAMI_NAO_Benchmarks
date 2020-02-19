@@ -16,15 +16,17 @@ import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
 import random
+from evaluations.utils import cleanup_obj
 
 class CustomDataset(Dataset):
-    def __init__(self, image_paths, flow_paths, target_nao_paths, target_conts_paths, clip_length = 1, train=True):
+    def __init__(self, image_paths, flow_paths, target_nao_paths, target_conts_paths, clip_length = 1, augment=True, train=True):
      self.image_paths = image_paths
      self.target_nao_paths = target_nao_paths
      self.target_conts_paths = target_conts_paths
      self.flow_paths = flow_paths
      self.clip_length = clip_length
      self.len = len(image_paths)
+     self.augment = augment
      self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
 
@@ -64,7 +66,10 @@ class CustomDataset(Dataset):
         overall_mask[0] = contact_mask
         overall_mask[1] = time_mask
 
-        flip = random.random() > 0.5
+        if self.augment:
+            flip = random.random() > 0.5
+        else:
+            flip = 0
 
         if flip:
             image = hflip(image)
@@ -407,6 +412,26 @@ def main():
     flow_data = sorted(glob.glob('./train/flow/*'))
     mask_nao_data = sorted(glob.glob('./train/masks_nao/*'))
     mask_cont_data = sorted(glob.glob('./train/masks_cont/*'))
+
+    image_val_data = sorted(glob.glob('./val/images/*'))
+    flow_val_data = sorted(glob.glob('./val/flow/*'))
+    mask_nao_val_data = sorted(glob.glob('./val/masks_nao/*'))
+    mask_cont_val_data = sorted(glob.glob('./val/masks_cont/*'))
+
+    subset = list(set(list(range(500))) - set([5, 7, 16, 18, 23, 134, 108]))
+
+    obj_idxs, obj_hist, _ = np.array(cleanup_obj(image_data, subset))
+    image_data = list(image_data[i] for i in obj_idxs)
+    mask_nao_data = list(mask_nao_data[i] for i in obj_idxs)
+    mask_cont_data = list(mask_cont_data[i] for i in obj_idxs)
+    flow_data = list(flow_data[i] for i in obj_idxs)
+
+    obj_idxs, obj_hist, _ = np.array(cleanup_obj(image_val_data, subset))
+    image_val_data = list(image_val_data[i] for i in obj_idxs)
+    mask_nao_val_data = list(mask_nao_val_data[i] for i in obj_idxs)
+    mask_cont_val_data = list(mask_cont_val_data[i] for i in obj_idxs)
+    flow_val_data = list(flow_val_data[i] for i in obj_idxs)
+
     device = torch.device("cuda")
     net = FCN8s(num_classes).to(device)
 
@@ -421,13 +446,8 @@ def main():
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
-    image_val_data = sorted(glob.glob('./val/images/*'))
-    flow_val_data = sorted(glob.glob('./val/flow/*'))
-    mask_nao_val_data = sorted(glob.glob('./val/masks_nao/*'))
-    mask_cont_val_data = sorted(glob.glob('./val/masks_cont/*'))
-
     train_dataset = CustomDataset(image_data, flow_data, mask_nao_data, mask_cont_data, clip_length=clip_length, train=True)
-    val_dataset = CustomDataset(image_val_data, flow_val_data, mask_nao_val_data, mask_cont_val_data, clip_length=clip_length, train=True)
+    val_dataset = CustomDataset(image_val_data, flow_val_data, mask_nao_val_data, mask_cont_val_data, clip_length=clip_length, augment=False, train=True)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, num_workers=1)
