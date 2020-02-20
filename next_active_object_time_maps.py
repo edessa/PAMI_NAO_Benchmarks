@@ -411,10 +411,10 @@ def main():
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     train_dataset = CustomDataset(image_data, time_data, mask_data, clip_length=clip_length, train=True)
-    test_dataset = CustomDataset(image_val_data, time_val_data, mask_val_data, clip_length=clip_length, train=True)
+    test_dataset = CustomDataset(image_val_data, time_val_data, mask_val_data, augment=False, clip_length=clip_length, train=True)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
-    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, augment=False, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
     print('Training session -- Next Active Object Time Maps')
     for epoch in range(s, 200):
