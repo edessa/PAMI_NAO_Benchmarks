@@ -55,6 +55,27 @@ def cleanup_obj(image_files, objs, filename='./evaluations/EPIC_train_action_lab
 
     return selected_filepath, noun_hist, uid_to_obj
 
+def get_judd_auc(output_mask, gt_mask):
+    gt_mask_jacc = np.array(gt_mask) > 0.5
+    output_rel_gt = output_mask[gt_mask_jacc]
+    n_f = len(output_rel_gt)
+    n_p = len(output_mask)
+
+    thresholds = sorted(output_rel_gt)
+    tp = np.zeros(len(thresholds)+2)
+    fp = np.zeros(len(thresholds)+2)
+
+    tp[0] = 0
+    tp[-1] = 1
+    fp[0] = 0
+    fp[-1] = 1
+
+    for k, thresh in enumerate(thresholds):
+        above_th = np.sum(output_mask >= thresh) # Total number of saliency map values above threshold
+        tp[k+1] = (k + 1) / float(n_f) # Ratio saliency map values at fixation locations above threshold
+        fp[k+1] = (above_th - k - 1) / float(n_p - n_f) # Ratio other saliency map values above threshold
+    return np.trapz(tp, fp) # y, x
+
 def loss_seg_fn(output, target):
     weight = torch.tensor([1.0]).cuda()
     loss_fn = nn.BCELoss()
@@ -66,13 +87,10 @@ def l1(output, target):
     loss = torch.mean(torch.abs(output[res] - target[res]))
     return loss
 
-def KL(P,Q):
-    epsilon = 0.00001
-    # You may want to instead make copies to avoid changing the np arrays.
-    P = P+epsilon
-    Q = Q+epsilon
-    divergence = np.sum(P*np.log(P/Q))
-    return divergence
+def KLD(map1, map2, eps = 1e-12):
+    map1, map2 = map1/(map1.sum()+eps), map2/(map2.sum() + eps)
+    kld = np.sum(map2*np.log( map2/(map1+eps) + eps))
+    return kld
 
 def coherence_error(flow, pred_1, pred_2):
     pred_1 = pred_1.reshape(128, 228)
@@ -85,5 +103,7 @@ def normalize(v):
        return v
     return v / float(norm)
 
-def histogram_intersection(h1, h2):
-    return 1 - spatial.distance.cosine(h1, h2)
+def SIM(map1, map2, eps=1e-12):
+    map1, map2 = map1/(map1.sum()+eps), map2/(map2.sum() + eps)
+    intersection = np.minimum(map1, map2)
+    return np.sum(intersection)

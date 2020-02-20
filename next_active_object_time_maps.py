@@ -104,7 +104,7 @@ class FCN8s(nn.Module):
     def __init__(self, n_class=21):
         super(FCN8s, self).__init__()
         # conv1
-        self.conv1_1 = nn.Conv2d(3, 64, 3, padding=100)
+        self.conv1_1 = nn.Conv2d(5, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.relu1_2 = nn.ReLU(inplace=True)
@@ -125,26 +125,6 @@ class FCN8s(nn.Module):
         self.conv3_3 = nn.Conv2d(256, 256, 3, padding=1)
         self.relu3_3 = nn.ReLU(inplace=True)
         self.pool3 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/8
-
-        #Time map layers
-        self.conv_flow1_1 = nn.Conv2d(2, 64, 3, padding=100)
-        self.relu_flow1_1 = nn.ReLU(inplace=True)
-        self.conv_flow1_2 = nn.Conv2d(64, 64, 3, padding=1)
-        self.relu_flow1_2 = nn.ReLU(inplace=True)
-        self.pool_flow1 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/2
-        self.conv_flow2_1 = nn.Conv2d(64, 128, 3, padding=1)
-        self.relu_flow2_1 = nn.ReLU(inplace=True)
-        self.conv_flow2_2 = nn.Conv2d(128, 128, 3, padding=1)
-        self.relu_flow2_2 = nn.ReLU(inplace=True)
-        self.pool_flow2 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/4
-        self.conv_flow3_1 = nn.Conv2d(128, 256, 3, padding=1)
-        self.relu_flow3_1 = nn.ReLU(inplace=True)
-        self.conv_flow3_2 = nn.Conv2d(256, 256, 3, padding=1)
-        self.relu_flow3_2 = nn.ReLU(inplace=True)
-        self.conv_flow3_3 = nn.Conv2d(256, 256, 3, padding=1)
-        self.relu_flow3_3 = nn.ReLU(inplace=True)
-        self.pool_flow3 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/8
-
 
         # conv4
         self.conv4_1 = nn.Conv2d(256, 512, 3, padding=1)
@@ -230,22 +210,7 @@ class FCN8s(nn.Module):
         h = self.relu3_2(self.conv3_2(h))
         h = self.relu3_3(self.conv3_3(h))
 
-
-        #Flow forward-pass here
-        f = self.relu_flow1_1(self.conv_flow1_1(f))
-        f = self.relu_flow1_2(self.conv_flow1_2(f))
-        f = self.pool_flow1(f)
-
-        f = self.relu_flow2_1(self.conv_flow2_1(f))
-        f = self.relu_flow2_2(self.conv_flow2_2(f))
-        f = self.pool_flow2(f)
-
-        f = self.relu_flow3_1(self.conv_flow3_1(f))
-        f = self.relu_flow3_2(self.conv_flow3_2(f))
-        f = self.relu_flow3_3(self.conv_flow3_3(f))
-
         #Sum flow and RGB features (could concatenate instead)
-        h = torch.add(h, f)
         h = self.pool3(h)
         pool3 = h  # 1/8
 
