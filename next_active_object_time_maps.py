@@ -15,6 +15,7 @@ from skimage.transform import resize
 import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
+from evaluations.utils import cleanup_obj
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, time_paths, target_paths, clip_length = 1, augment=True, train=True):
