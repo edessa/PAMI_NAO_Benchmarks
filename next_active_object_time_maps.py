@@ -307,8 +307,8 @@ class FCN8s(nn.Module):
                 l2.bias.data.copy_(l1.bias.data)
 
 accs = []
-var_gt = []
-var_out = []
+conts = []
+no_conts = []
 
 def loss_seg_fn(output, target):
     weight = torch.tensor([1.0]).cuda()
