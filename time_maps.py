@@ -298,7 +298,7 @@ def validate(test_loader, model, device, gamma=0.2):
             losses.append(loss.item())
     return np.mean(np.array(losses))
 
-def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_loss, gamma=0.2):
+def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_loss, best_tr_loss, gamma=0.2):
     model.train()
     pid = os.getpid()
 
@@ -335,12 +335,12 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
                 torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb.pt')
             model.train()
 
-            if np.mean(np.array(accs[-100:])) < best_loss - 0.03:
+            if np.mean(np.array(accs[-100:])) < best_tr_loss - 0.03:
                 print('Saving overfit model -- epoch no. ', epoch)
-                best_loss = np.mean(np.array(accs[-100:]))
-                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb_overfit.pt')
+                best_tr_loss = np.mean(np.array(accs[-100:]))
+                torch.save({'epoch': epoch, 'loss': best_tr_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb_overfit.pt')
 
-    return best_loss
+    return best_loss, best_tr_loss
 
 def main():
     num_classes = 2
@@ -376,6 +376,7 @@ def main():
     except Exception as err:
         s = 0
         best_loss = 100
+        best_tr_loss = 100
 
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
@@ -388,7 +389,7 @@ def main():
     best_loss = 100
     print('Training session -- Time Maps')
     for epoch in range(s, 200):
-        best_loss = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_loss)
+        best_loss, best_tr_loss = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_loss, best_tr_loss)
 
 if __name__ == '__main__':
     main()

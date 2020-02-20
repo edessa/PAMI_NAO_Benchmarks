@@ -42,14 +42,7 @@ class CustomDataset(Dataset):
         image = Image.open(self.image_paths[index]).resize((228, 128))
         mask = np.load(self.target_paths[index])
 
-        if self.augment:
-            flip = 0
-        else:
-            flip = random.random() > 0.5
-
-        if flip:
-            image = hflip(image)
-            mask = np.array(hflip(Image.fromarray(mask)))
+        flip = 0
 
         overall_image = torch.from_numpy(np.array(image.copy()).transpose(2, 0, 1)).type(torch.FloatTensor)
         overall_image = self.normalize(overall_image)
