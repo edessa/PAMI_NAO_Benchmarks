@@ -16,6 +16,7 @@ import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
 from evaluations.utils import cleanup_obj
+import random
 
 class CustomDataset(Dataset):
     def __init__(self, image_paths, time_paths, target_paths, clip_length = 1, augment=True, train=True):
@@ -63,7 +64,7 @@ class CustomDataset(Dataset):
 
         img_size = (228, 128)
 
-        for i in range(idx, idx - 2 * self.clip_length, -2):
+        for i in range(idx, idx - 4 * self.clip_length, -4):
             time_file[6] = str(i) + '.npy'
             time_filename = '_'.join(time_file)
             try:
@@ -75,9 +76,9 @@ class CustomDataset(Dataset):
                 time_map = cv2.resize(time_map, (228, 128), interpolation=cv2.INTER_LINEAR)
 
             if flip:
-                time_map = hflip(time_map)
+                time_map = np.flip(time_map, axis=1)
 
-            time_map = torch.from_numpy(time_map.reshape(1, 128, 228)).type(torch.FloatTensor)
+            time_map = torch.from_numpy(time_map.copy().reshape(1, 128, 228)).type(torch.FloatTensor)
             overall_image = torch.cat((overall_image, time_map), 0)
 
     #    masks = [torch.from_numpy(masks).type(torch.FloatTensor)]
@@ -126,7 +127,7 @@ class FCN8s(nn.Module):
         self.pool3 = nn.MaxPool2d(2, stride=2, ceil_mode=True)  # 1/8
 
         #Time map layers
-        self.conv_flow1_1 = nn.Conv2d(4, 64, 3, padding=100)
+        self.conv_flow1_1 = nn.Conv2d(2, 64, 3, padding=100)
         self.relu_flow1_1 = nn.ReLU(inplace=True)
         self.conv_flow1_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.relu_flow1_2 = nn.ReLU(inplace=True)
@@ -374,7 +375,7 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
 
 def main():
     num_classes = 1
-    clip_length = 4
+    clip_length = 2
     in_batch, inchannel, in_h, in_w = 16, 3, 224, 224
     image_data = sorted(glob.glob('./train/images/*'))
     mask_data = sorted(glob.glob('./train/masks_nao/*'))

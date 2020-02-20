@@ -16,6 +16,8 @@ import cv2
 from torch.utils.data.sampler import SubsetRandomSampler
 from torchvision.transforms.functional import hflip
 from evaluations.utils import cleanup_obj
+import random
+
 
 class CustomDataset(Dataset):
     def __init__(self, time_paths, target_paths, clip_length = 1, augment=True, train=True):
@@ -60,7 +62,7 @@ class CustomDataset(Dataset):
 
         img_size = (228, 128)
 
-        for i in range(idx, idx - 2 * self.clip_length, -2):
+        for i in range(idx, idx - 4 * self.clip_length, -4):
             time_file[6] = str(i) + '.npy'
             time_filename = '_'.join(time_file)
             try:
@@ -72,9 +74,9 @@ class CustomDataset(Dataset):
                 time_map = cv2.resize(time_map, (228, 128), interpolation=cv2.INTER_LINEAR)
 
             if flip:
-                time_map = hflip(time_map)
+                time_map = np.flip(time_map, axis=1)
 
-            time_map = torch.from_numpy(time_map.reshape(1, 128, 228)).type(torch.FloatTensor)
+            time_map = torch.from_numpy(time_map.copy().reshape(1, 128, 228)).type(torch.FloatTensor)
 
             if overall_image is None:
                 overall_image = time_map
@@ -104,7 +106,7 @@ class FCN8s(nn.Module):
     def __init__(self, n_class=21):
         super(FCN8s, self).__init__()
         # conv1
-        self.conv1_1 = nn.Conv2d(4, 64, 3, padding=100)
+        self.conv1_1 = nn.Conv2d(2, 64, 3, padding=100)
         self.relu1_1 = nn.ReLU(inplace=True)
         self.conv1_2 = nn.Conv2d(64, 64, 3, padding=1)
         self.relu1_2 = nn.ReLU(inplace=True)
@@ -337,7 +339,7 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
 
 def main():
     num_classes = 1
-    clip_length = 4
+    clip_length = 2
 
     image_data = sorted(glob.glob('./train/images/*'))
     mask_data = sorted(glob.glob('./train/masks_nao/*'))
@@ -374,7 +376,7 @@ def main():
     optimizer = optim.Adam(net.parameters(), lr=0.0001)
 
     train_dataset = CustomDataset(time_data, mask_data, clip_length=clip_length, train=True)
-    test_dataset = CustomDataset(time_val_data, mask_val_data, clip_length=clip_length,  augment=False, train=True)
+    test_dataset = CustomDataset(time_val_data, mask_val_data, clip_length=clip_length, augment=False, train=True)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
