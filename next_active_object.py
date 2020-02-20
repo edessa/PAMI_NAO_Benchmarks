@@ -286,7 +286,7 @@ def validate(test_loader, model, device, gamma=0.2):
             jaccards.append(jaccard)
     return np.mean(np.array(jaccards))
 
-def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_jaccard):
+def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_jaccard, best_loss):
     model.train()
     pid = os.getpid()
     for batch_idx, (data, target) in enumerate(data_loader):
@@ -317,7 +317,13 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
                 print('Saving model -- epoch no. ', epoch)
                 torch.save({'epoch': epoch, 'jaccard': val_jaccard, 'model_state_dict': model.state_dict()}, './weights/nao.pt')
             model.train()
-    return best_jaccard
+
+            if np.mean(np.array(accs[-100:])) < best_loss - 0.02:
+                print('Saving overfit model -- epoch no. ', epoch)
+                best_loss = np.mean(np.array(accs[-100:]))
+                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/nao_overfit.pt')
+
+    return best_jaccard, best_loss
 
 def main():
     num_classes = 1
@@ -358,9 +364,10 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
+    best_loss = 100
     print('Training session -- Next Active Object Single RGB Frame')
     for epoch in range(s, 200):
-        best_jaccard = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard)
+        best_jaccard, best_loss = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_jaccard, best_loss)
 
 if __name__ == '__main__':
     main()

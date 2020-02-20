@@ -26,7 +26,7 @@ class CustomDataset(Dataset):
      self.target_conts_paths = target_conts_paths
      self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
-     self.augment = augment                             
+     self.augment = augment
      self.len = len(image_paths)
 
     def get_contacts(self, mask):
@@ -334,6 +334,12 @@ def train_epoch(epoch, model, device, data_loader, test_loader, optimizer, best_
                 print('Saving model -- epoch no. ', epoch)
                 torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb.pt')
             model.train()
+
+            if np.mean(np.array(accs[-100:])) < best_loss - 0.03:
+                print('Saving overfit model -- epoch no. ', epoch)
+                best_loss = np.mean(np.array(accs[-100:]))
+                torch.save({'epoch': epoch, 'loss': best_loss, 'model_state_dict': model.state_dict()}, './weights/time_maps_rgb_overfit.pt')
+
     return best_loss
 
 def main():
@@ -379,6 +385,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, shuffle=True, batch_size=16, num_workers=1)
     test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
 
+    best_loss = 100
     print('Training session -- Time Maps')
     for epoch in range(s, 200):
         best_loss = train_epoch(epoch, net, device, train_loader, test_loader, optimizer, best_loss)

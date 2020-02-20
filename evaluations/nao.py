@@ -19,14 +19,14 @@ num_classes = 1
 device = torch.device("cuda")
 
 net = FCN8s(num_classes).to(device)
-checkpoint = torch.load('/home/lab/all_weights/uid/weights/nao.pt')
+checkpoint = torch.load('../weights/nao.pt')
 net.load_state_dict(checkpoint['model_state_dict'])
 print(checkpoint['epoch'])
 net.train()
 clip_length = 4
-image_val_data = sorted(glob.glob('/home/lab/all_weights/uid/val/images/*'))
-mask_val_data = sorted(glob.glob('/home/lab/all_weights/uid/val/masks/*'))
-flow_val_data = sorted(glob.glob('/home/lab/all_weights/uid/val/flow/*'))
+image_val_data = sorted(glob.glob('../val/images/*'))
+mask_val_data = sorted(glob.glob('../val/masks/*'))
+flow_val_data = sorted(glob.glob('../val/flow/*'))
 
 test_dataset = CustomDataset(image_val_data, mask_val_data, train=True)
 test_loader = torch.utils.data.DataLoader(test_dataset, shuffle=True, batch_size=16, num_workers=1)
@@ -65,6 +65,6 @@ with torch.no_grad():
         if count == 100:
             break
 
-#auc = roc_auc_score(np.ones(len(jaccards)), jaccards)
-
+auc = roc_auc_score(np.ones(len(jaccards)), jaccards)
+print(auc)
 print(np.mean(np.array(jaccards)))
