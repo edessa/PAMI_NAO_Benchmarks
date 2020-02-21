@@ -21,7 +21,7 @@ def cleanup_obj(image_files, objs, filename='./evaluations/EPIC_train_action_lab
         filename_list.append(filename)
     my_list = list(set(interested_uids))
 
-    with open('./evaluations/EPIC_train_action_labels.csv') as f:
+    with open('./EPIC_train_action_labels.csv') as f:
         reader = list(csv.DictReader(f))
         for m in my_list:
             for row in reader:
@@ -34,7 +34,7 @@ def cleanup_obj(image_files, objs, filename='./evaluations/EPIC_train_action_lab
     unique_object = np.unique(np.array(object_list))
     noun_hist = {}
     uid_to_obj = {}
-    with open('./evaluations/EPIC_train_action_labels.csv') as f:
+    with open('./EPIC_train_action_labels.csv') as f:
         reader = list(csv.DictReader(f))
         for row in reader:
             uid_to_obj[row['uid']] = row['noun_class']

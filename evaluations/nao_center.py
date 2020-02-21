@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import entropy
 from sklearn.metrics import roc_auc_score
 from utils import *
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report, confusion_matrix
 
 image_val_data = sorted(glob.glob('../val/images/*'))
 mask_val_data = sorted(glob.glob('../val/masks_nao/*'))
@@ -34,7 +35,10 @@ center = center.reshape(-1,)
 
 count = 0
 jaccards = []
-aucs = []
+
+Fs = []
+recalls = []
+
 kls = []
 sims = []
 tracking = [0]
@@ -42,11 +46,14 @@ contour_matching = []
 
 for batch_idx, (test_images, test_labels) in enumerate(test_loader):
     gt_mask = test_labels.reshape(-1,).data.cpu().numpy()
-    for i in range(16):
+    for i in range(len(test_labels)):
         gt_mask = test_labels[i].reshape(-1,).data.cpu().numpy()
 
-        auc = get_judd_auc(center, gt_mask)
-        aucs.append(auc)
+        prec = precision_score(gt_mask, center)
+        recall = recall_score(gt_mask, center)
+        if prec + recall != 0:
+            F = 2 * (prec * recall) / (prec + recall)
+            Fs.append(F)
 
         jaccard = jsc(gt_mask, center)
         jaccards.append(jaccard)
@@ -57,11 +64,7 @@ for batch_idx, (test_images, test_labels) in enumerate(test_loader):
         sim = SIM(center, gt_mask)
         sims.append(sim)
 
-    count += 1
-    if count == 10:
-        break
-
-print(np.mean(np.array(sims)))
-print(np.mean(np.array(aucs)))
-print(np.mean(np.array(kls)))
-print(np.mean(np.array(jaccards)))
+print('sim', np.mean(np.array(sims)))
+print('F', np.mean(np.array(Fs)))
+print('kl', np.mean(np.array(kls)))
+print('jacc', np.mean(np.array(jaccards)))

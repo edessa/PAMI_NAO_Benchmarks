@@ -17,15 +17,15 @@ num_classes = 1
 device = torch.device("cuda")
 
 net = FCN8s(num_classes).to(device)
-checkpoint = torch.load('/home/lab/Object_Split/weights/nao.pt')
+checkpoint = torch.load('/home/lab/Object_Split/weights/nao_overfit.pt')
 net.load_state_dict(checkpoint['model_state_dict'])
 net.eval()
 
 clip_length = 4
-image_val_data = sorted(glob.glob('./val/images/*'))
-flow_val_data = sorted(glob.glob('./val/flow/*'))
+image_val_data = sorted(glob.glob('./train/images/*'))
+flow_val_data = sorted(glob.glob('./train/flow/*'))
 #time_val_data = sorted(glob.glob('./train/time_map_data_rgb/*'))
-mask_val_data = sorted(glob.glob('./val/masks_nao/*'))
+mask_val_data = sorted(glob.glob('./train/masks_nao/*'))
 
 test_loader = CustomDataset(image_val_data, mask_val_data, train=False)
 test_loader = torch.utils.data.DataLoader(test_loader, shuffle=False, batch_size=16, num_workers=1)
@@ -42,8 +42,8 @@ with torch.no_grad():
         jaccard = jsc(gt_mask, output_mask)
         jaccards.append(jaccard)
         print(jaccard, output.shape)
-        for b_idx in range(16):
-            np.save('./val/nao_predictions/' + image_val_data[count].replace('./val/images/', '').replace('.png', ''), output[b_idx].data.cpu().numpy())
-            count += 1
-print('jac', np.mean(np.array(jaccards)))
-print('best', checkpoint['jaccard'])
+        if jaccard > 0.5:
+            for b_idx in range(16):
+                np.save('./train/nao_predictions/' + image_val_data[count].replace('./train/images/', '').replace('.png', ''), output[b_idx].data.cpu().numpy())
+                #cv2.imwrite('./train/nao_predictions/' + image_val_data[count].replace('./train/images/', ''), cv2.imread(image_val_data))
+                count += 1
